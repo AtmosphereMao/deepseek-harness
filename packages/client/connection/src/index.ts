@@ -59,11 +59,21 @@ export interface ConnectionConfig {
   trustedHosts?: string[]
   /** Maximum buffered JSON body for every `/api` request. */
   maxRequestBodyBytes?: number
+  /**
+   * Allow privileged methods (the settings/credentials/config plane) from
+   * non-loopback trusted hosts. Defaults to false, which keeps those methods
+   * loopback-only. Set true only when a separate authentication layer (for
+   * example web-auth's password gate) already gates the whole surface, so every
+   * request reaching this row is authenticated — otherwise this exposes the
+   * credential store and configuration to any caller on a trusted host.
+   */
+  allowRemotePrivileged?: boolean
 }
 
 export const Config: z<ConnectionConfig> = z.object({
   trustedHosts: z.array(String).default([]),
   maxRequestBodyBytes: z.natural().min(1).default(DEFAULT_MAX_REQUEST_BODY_BYTES),
+  allowRemotePrivileged: z.boolean().default(false),
 })
 
 /**
@@ -131,6 +141,7 @@ export function apply(ctx: Context, config?: ConnectionConfig): void {
   // The Loader resolves schema defaults; hand-built test contexts may pass none.
   const trustedHosts = config?.trustedHosts ?? []
   const maxRequestBodyBytes = config?.maxRequestBodyBytes ?? DEFAULT_MAX_REQUEST_BODY_BYTES
+  const allowRemotePrivileged = config?.allowRemotePrivileged ?? false
   // Config boundary: a malformed entry fails the load loudly here rather than
   // silently authorizing its hostname prefix at request time.
   for (const entry of trustedHosts) assertTrustedAuthority(entry)
@@ -144,6 +155,7 @@ export function apply(ctx: Context, config?: ConnectionConfig): void {
         : undefined
       if (method !== undefined
         && PRIVILEGED_METHODS.has(method)
+        && !allowRemotePrivileged
         && !isTrustedApiRequest(request, [])) {
         return new Response('forbidden', { status: 403 })
       }
