@@ -119,6 +119,15 @@
         host: !!js ctx.webStartup.host ?? '127.0.0.1'
         port: !!js ctx.webStartup.port ?? 3080
 
+    # Server-side password gate: when DSH_WEB_PASSWORD is unset the row is a
+    # no-op; set it to require a password (login page + HttpOnly session cookie)
+    # before any route, asset, /api call, or WebSocket upgrade is served.
+    - id: web-auth
+      name: '@deepseek-ai/dsh-host-web-auth'
+      inject: [webServer]
+      config:
+        password: !!js process.env.DSH_WEB_PASSWORD
+
     # Web glue owned by this bundle: resolves the built frontend dist (an
     # assembly fact of dsh-web-app, never user config), mounts the
     # frontend-static fallback owner, registers the web-surface prompt

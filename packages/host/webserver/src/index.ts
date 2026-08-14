@@ -41,6 +41,49 @@ export interface WebUpgradeRoute {
   handler: (req: IncomingMessage, socket: Duplex, head: Buffer) => void | Promise<void>
 }
 
+/** Continuation passed to a middleware: call it to yield to the next middleware (or to dispatch). */
+export type WebMiddlewareNext = () => void | Promise<void>
+
+/**
+ * HTTP request middleware: runs before route dispatch, in registration order.
+ * Call `next()` to continue; not calling `next()` short-circuits (the
+ * middleware owns the response).
+ */
+export type WebMiddleware = (
+  req: IncomingMessage,
+  res: ServerResponse,
+  next: WebMiddlewareNext,
+) => void | Promise<void>
+
+/**
+ * HTTP upgrade (WebSocket) middleware: runs before upgrade route dispatch, in
+ * registration order. Call `next()` to continue; not calling `next()`
+ * short-circuits (the middleware owns socket teardown).
+ */
+export type WebUpgradeMiddleware = (
+  req: IncomingMessage,
+  socket: Duplex,
+  next: WebMiddlewareNext,
+) => void | Promise<void>
+
+/** Drive a middleware list, resolving true only when every entry invoked `next`. */
+function runMiddlewareChain<T>(
+  taps: readonly T[],
+  invoke: (tap: T, next: WebMiddlewareNext) => void | Promise<void>,
+): Promise<boolean> {
+  const step = (at: number): Promise<boolean> => {
+    const tap = taps[at]
+    if (tap === undefined) return Promise.resolve(true)
+    let called = false
+    const next: WebMiddlewareNext = (): Promise<void> => {
+      called = true
+      return step(at + 1).then(() => undefined)
+    }
+    return Promise.resolve(invoke(tap, next)).then(() => called)
+  }
+  return step(0)
+}
+
 /** Gateway config: the listen address. */
 export interface Config {
   /** Listen host; the two supported values are loopback and all-interfaces. */
@@ -67,6 +110,8 @@ export class WebServer extends Service {
   private readonly upgrades = new Map<string, WebUpgradeRoute>()
   private readonly upgradedSockets = new Set<Duplex>()
   private readonly indexTaps: ((html: string) => string)[] = []
+  private readonly requestTaps: WebMiddleware[] = []
+  private readonly upgradeTaps: WebUpgradeMiddleware[] = []
   private fallback: WebRoute['handler'] | undefined
   private server!: Server
   private listenedPort!: number
@@ -144,9 +189,41 @@ export class WebServer extends Service {
     }
   }
 
+  /**
+   * Register HTTP request middleware, applied before route dispatch in
+   * registration order. Call `next()` to continue; skip it to short-circuit
+   * (the middleware owns the response).
+   * @param middleware - the middleware to run.
+   * @returns the disposer removing the middleware.
+   */
+  tapRequest(middleware: WebMiddleware): () => void {
+    this.requestTaps.push(middleware)
+    return () => {
+      const at = this.requestTaps.indexOf(middleware)
+      if (at !== -1) this.requestTaps.splice(at, 1)
+    }
+  }
+
+  /**
+   * Register HTTP upgrade (WebSocket) middleware, applied before upgrade route
+   * dispatch in registration order. Call `next()` to continue; skip it to
+   * short-circuit (the middleware owns socket teardown).
+   * @param middleware - the middleware to run.
+   * @returns the disposer removing the middleware.
+   */
+  tapUpgrade(middleware: WebUpgradeMiddleware): () => void {
+    this.upgradeTaps.push(middleware)
+    return () => {
+      const at = this.upgradeTaps.indexOf(middleware)
+      if (at !== -1) this.upgradeTaps.splice(at, 1)
+    }
+  }
+
   /** Listen; resolves once the socket is bound (rejection = FAILED fiber). */
   async [Service.init](): Promise<void> {
     const handle = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
+      // Request middleware runs first; a short-circuit owns the response.
+      if (!(await this.runRequestTaps(req, res))) return
       /* v8 ignore next -- `?? '/'` arm: node:http always sets url on server
       requests; the field is only optional on the client-side IncomingMessage type */
       const rawPath = new URL(req.url ?? '/', 'http://x').pathname
@@ -188,29 +265,35 @@ export class WebServer extends Service {
         socket.off('error', onError)
         this.upgradedSockets.delete(socket)
       })
-      let route: WebUpgradeRoute | undefined
-      try {
-        /* v8 ignore next -- node:http always sets url on server requests. */
-        route = this.upgrades.get(new URL(req.url ?? '/', 'http://x').pathname)
-      } catch (error) {
-        this.ctx.logger.warn(error instanceof Error ? error : new Error(String(error)))
-        socket.destroy()
-        return
-      }
-      if (route === undefined) {
-        socket.destroy()
-        return
-      }
-      this.upgradedSockets.add(socket)
-      try {
-        Promise.resolve(route.handler(req, socket, head)).catch((error: unknown) => {
+      void this.runUpgradeTaps(req, socket).then((proceed) => {
+        if (!proceed) return
+        let route: WebUpgradeRoute | undefined
+        try {
+          /* v8 ignore next -- node:http always sets url on server requests. */
+          route = this.upgrades.get(new URL(req.url ?? '/', 'http://x').pathname)
+        } catch (error) {
           this.ctx.logger.warn(error instanceof Error ? error : new Error(String(error)))
           socket.destroy()
-        })
-      } catch (error) {
+          return
+        }
+        if (route === undefined) {
+          socket.destroy()
+          return
+        }
+        this.upgradedSockets.add(socket)
+        try {
+          Promise.resolve(route.handler(req, socket, head)).catch((error: unknown) => {
+            this.ctx.logger.warn(error instanceof Error ? error : new Error(String(error)))
+            socket.destroy()
+          })
+        } catch (error) {
+          this.ctx.logger.warn(error instanceof Error ? error : new Error(String(error)))
+          socket.destroy()
+        }
+      }).catch((error: unknown) => {
         this.ctx.logger.warn(error instanceof Error ? error : new Error(String(error)))
         socket.destroy()
-      }
+      })
     })
 
     await new Promise<void>((resolve, reject) => {
@@ -260,6 +343,16 @@ export class WebServer extends Service {
     let out = html
     for (const transform of this.indexTaps) out = transform(out)
     return out
+  }
+
+  /** Run request middleware in order; resolve false when any short-circuits. */
+  private runRequestTaps(req: IncomingMessage, res: ServerResponse): Promise<boolean> {
+    return runMiddlewareChain(this.requestTaps, (tap, next) => tap(req, res, next))
+  }
+
+  /** Run upgrade middleware in order; resolve false when any short-circuits. */
+  private runUpgradeTaps(req: IncomingMessage, socket: Duplex): Promise<boolean> {
+    return runMiddlewareChain(this.upgradeTaps, (tap, next) => tap(req, socket, next))
   }
 }
 
