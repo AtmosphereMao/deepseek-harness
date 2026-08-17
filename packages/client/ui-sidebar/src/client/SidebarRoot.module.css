@@ -337,3 +337,41 @@
     animation: none;
   }
 }
+
+/* Phone, closed (AppFrame `floating` + `collapsed`): the column is one button
+   floating over the conversation instead of a rail. No column fill, padding or
+   height — the wrapper is only the button's box, so every pixel around it stays
+   the conversation's and remains tappable. */
+.floatingRoot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 0 0 6px;
+}
+
+/* Same 36px control box as the rail, but it needs its own resting fill: over the
+   conversation (not the sidebar column) a transparent circle would leave the
+   whale floating on chat text with no hit-target affordance. */
+.floatingToggle {
+  width: 36px;
+  height: 36px;
+  background: var(--dsw-specific-sidebar-fill);
+  box-shadow: var(--dsw-shadow-lv2);
+  color: var(--dsw-alias-label-primary);
+}
+
+/* Rest as the whale mark, swap to the panel (open) icon on hover/focus — the
+   rail's affordance, rekeyed off .collapsed, which this state does not carry. */
+.floatingToggle .panelIcon {
+  display: none;
+}
+
+.floatingToggle:hover .panelIcon,
+.floatingToggle:focus-visible .panelIcon {
+  display: inline;
+}
+
+.floatingToggle:hover .railFish,
+.floatingToggle:focus-visible .railFish {
+  display: none;
+}

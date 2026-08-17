@@ -31,6 +31,21 @@ export const SIDEBAR_COLLAPSED = 56
  * LG breakpoint); a manual toggle below it re-expands over the squeezed center
  * (stores.ts narrowExpanded). */
 export const SIDEBAR_AUTO_COLLAPSE = 1024
+/** Viewport width below which a re-expanded sidebar renders as a floating
+ * drawer instead of an inline track: below it a track at the SIDEBAR_MIN
+ * floor leaves the center too narrow to read. Tablets (this width up to
+ * SIDEBAR_AUTO_COLLAPSE) keep the inline squeeze. */
+export const SIDEBAR_OVERLAY_BREAKPOINT = 640
+/** The overlay drawer caps its width at this ratio of the viewport so a scrim
+ * strip stays tappable and a desktop-dragged preference never overflows. */
+export const SIDEBAR_OVERLAY_MAX_RATIO = 0.85
+/** Leading space the frame reserves for the floating toggle below
+ * SIDEBAR_OVERLAY_BREAKPOINT, published as the `--dsh-frame-leading-inset`
+ * custom property. Only row chrome starting at the center column's leading
+ * edge pads by it (the conversation header); the scrollport keeps the full
+ * width, which is what makes the floating control cheaper than the
+ * SIDEBAR_COLLAPSED track it replaces. */
+export const SIDEBAR_FLOATING_INSET = 36
 /** Details drag clamp floor. */
 export const DETAILS_MIN = 300
 /** Details drag clamp ceiling. */

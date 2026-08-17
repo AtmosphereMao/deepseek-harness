@@ -42,11 +42,20 @@ const SCROLLBAR_LINGER_MS = 2000
 export function SidebarRoot({
   collapsed,
   width,
+  floating,
   startSession,
   toggleSidebar,
   t,
   renderSlot,
 }: SidebarRootComponentProps) {
+  // Phone collapsed state: the frame gives the column no track and positions it
+  // over the conversation, so the rail's remaining controls would sit on top of
+  // the chat. Collapse all the way to the single open affordance instead — the
+  // drawer that opening reveals carries every control the rail used to show.
+  // Decided here but returned after the hooks below, so the hook order never
+  // changes when a rotation or resize flips the flag.
+  const buttonOnly = floating && collapsed
+
   // Wide content stays mounted while the collapse animates (fading via
   // .collapsed .wide), unmounts at settle, and remounts right away on expand.
   const [settled, setSettled] = useState(collapsed)
@@ -110,6 +119,27 @@ export function SidebarRoot({
       cancelLinger()
     }
   }, [pointerInside])
+
+  // Phone, closed: one floating button. The rail's other controls (New Session,
+  // search, workspaces, settings) are all reachable one tap later inside the
+  // drawer, so nothing is lost by not painting them over the conversation.
+  if (buttonOnly) {
+    return (
+      <div className={css.floatingRoot}>
+        <Tooltip label={t('toggle.open')} delayMs={500}>
+          <button
+            type="button"
+            className={clsx(css.iconButton, css.toggle, css.floatingToggle)}
+            aria-label={t('toggle.open')}
+            onClick={() => { toggleSidebar() }}
+          >
+            <FishLogo className={css.railFish} size={24} />
+            <IconPanelLeftOutline16 className={css.panelIcon} size={18} />
+          </button>
+        </Tooltip>
+      </div>
+    )
+  }
 
   return (
     <div

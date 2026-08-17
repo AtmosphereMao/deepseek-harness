@@ -11,11 +11,11 @@
  * resizes are driven through the ResizeObserver stub.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, render } from '@testing-library/react'
+import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { useSyncExternalStore } from 'react'
 import { AppFrame } from '@deepseek-ai/dsh-client-ui-layout/src/client/AppFrame.tsx'
 import type { AppFrameProps } from '@deepseek-ai/dsh-client-ui-layout/src/client/AppFrame.tsx'
-import { SIDEBAR_COLLAPSED } from '@deepseek-ai/dsh-client-ui-layout/src/client/columns.ts'
+import { SIDEBAR_COLLAPSED, SIDEBAR_FLOATING_INSET, SIDEBAR_OVERLAY_MAX_RATIO } from '@deepseek-ai/dsh-client-ui-layout/src/client/columns.ts'
 import { createLayoutStore } from '@deepseek-ai/dsh-client-ui-layout/src/client/stores.ts'
 import type {
   SessionId, SessionListState, WorkspaceListState,
@@ -216,7 +216,7 @@ describe('AppFrame', () => {
 
   it('sidebar slot receives live concession output as owner props', () => {
     const { slotCalls } = mountFrame()
-    expect(slotCalls.find(c => c.key === 'sidebar')!.props).toEqual({ collapsed: false, width: 280 })
+    expect(slotCalls.find(c => c.key === 'sidebar')!.props).toEqual({ collapsed: false, width: 280, floating: false })
   })
 
   it('sidebar drag widens through rAF-batched pointer moves', () => {
@@ -258,7 +258,7 @@ describe('AppFrame', () => {
     expect(getByTestId('sidebar-content')).toBeTruthy()
     expect(frame.hasAttribute('data-sidebar-collapsed')).toBe(true)
     const lastSidebarCall = slotCalls.filter(c => c.key === 'sidebar').at(-1)!
-    expect(lastSidebarCall.props).toEqual({ collapsed: true, width: SIDEBAR_COLLAPSED })
+    expect(lastSidebarCall.props).toEqual({ collapsed: true, width: SIDEBAR_COLLAPSED, floating: false })
   })
 
   it('viewport shrink triggers the concession chain via ResizeObserver', () => {
@@ -290,7 +290,7 @@ describe('AppFrame — narrow-viewport auto-collapse', () => {
     const { frame, slotCalls } = mountFrame()
     expect(tracks(frame)).toEqual([SIDEBAR_COLLAPSED, 0])
     expect(frame.hasAttribute('data-sidebar-collapsed')).toBe(true)
-    expect(slotCalls.filter(c => c.key === 'sidebar').at(-1)!.props).toEqual({ collapsed: true, width: SIDEBAR_COLLAPSED })
+    expect(slotCalls.filter(c => c.key === 'sidebar').at(-1)!.props).toEqual({ collapsed: true, width: SIDEBAR_COLLAPSED, floating: false })
     expect(frame.querySelectorAll('[class*="handle"]')).toHaveLength(0)
   })
 
@@ -394,5 +394,94 @@ describe('AppFrame — unmount with an in-flight resize frame', () => {
     frameWidth = 1250
     act(() => { fireResize?.(); fireResize?.(); vi.advanceTimersByTime(20) })
     expect(tracks(frame)).toEqual([280, 330])
+  })
+})
+
+describe('AppFrame — phone-viewport overlay drawer', () => {
+  it('renders the expanded sidebar as a floating drawer above a full-width center', () => {
+    frameWidth = 375
+    const { frame, instance, slotCalls } = mountFrame()
+    act(() => { instance.actions.toggleSidebar() })
+    // Sidebar track yields to the overlay (0px) and details stays closed, so
+    // the center keeps the whole viewport; the drawer floats above the scrim.
+    expect(tracks(frame)).toEqual([0, 0])
+    expect(frame.hasAttribute('data-sidebar-overlay')).toBe(true)
+    expect(frame.hasAttribute('data-sidebar-collapsed')).toBe(false)
+    expect(frame.querySelectorAll('[class*="handle"]')).toHaveLength(0)
+    expect(frame.querySelector('[class*="scrim"]')).toBeTruthy()
+    expect(slotCalls.filter(c => c.key === 'sidebar').at(-1)!.props).toEqual({ collapsed: false, width: 280, floating: true })
+  })
+
+  it('scrim tap closes the drawer back to the floating control', () => {
+    frameWidth = 375
+    const { frame, instance } = mountFrame()
+    act(() => { instance.actions.toggleSidebar() })
+    expect(frame.hasAttribute('data-sidebar-overlay')).toBe(true)
+    fireEvent.click(frame.querySelector('[class*="scrim"]')!)
+    expect(frame.hasAttribute('data-sidebar-overlay')).toBe(false)
+    // Closing does NOT restore the 56px rail track on a phone: the collapsed
+    // column keeps a 0px track and floats as the control instead.
+    expect(tracks(frame)).toEqual([0, 0])
+    expect(frame.hasAttribute('data-sidebar-floating')).toBe(true)
+    expect(frame.querySelector('[class*="scrim"]')).toBeNull()
+    expect(instance.getSnapshot().narrowExpanded).toBe(false)
+  })
+
+  it('caps the drawer width to a viewport ratio when the preference is wider', () => {
+    frameWidth = 375
+    const { frame, instance, slotCalls } = mountFrame()
+    act(() => { instance.actions.setSidebar(420) })
+    act(() => { instance.actions.toggleSidebar() })
+    expect(tracks(frame)).toEqual([0, 0])
+    expect(slotCalls.filter(c => c.key === 'sidebar').at(-1)!.props)
+      .toEqual({ collapsed: false, width: Math.round(375 * SIDEBAR_OVERLAY_MAX_RATIO), floating: true })
+  })
+})
+
+describe('AppFrame — phone-viewport floating collapsed control', () => {
+  it('gives the collapsed column no track and floats it at the inset width', () => {
+    frameWidth = 375
+    const { frame, slotCalls } = mountFrame()
+    // Below the breakpoint the frame mounts collapsed (auto-collapse) and the
+    // rail track is gone: the center spans the full 375px viewport.
+    expect(tracks(frame)).toEqual([0, 0])
+    expect(frame.hasAttribute('data-sidebar-floating')).toBe(true)
+    expect(frame.hasAttribute('data-sidebar-collapsed')).toBe(true)
+    expect(frame.hasAttribute('data-sidebar-overlay')).toBe(false)
+    // No scrim while closed: the conversation stays fully interactive.
+    expect(frame.querySelector('[class*="scrim"]')).toBeNull()
+    expect(frame.querySelectorAll('[class*="handle"]')).toHaveLength(0)
+    expect(slotCalls.filter(c => c.key === 'sidebar').at(-1)!.props)
+      .toEqual({ collapsed: true, width: SIDEBAR_FLOATING_INSET, floating: true })
+  })
+
+  it('publishes the leading inset only while the control floats', () => {
+    frameWidth = 375
+    const { frame, instance } = mountFrame()
+    expect(frame.style.getPropertyValue('--dsh-frame-leading-inset')).toBe(`${SIDEBAR_FLOATING_INSET}px`)
+    // The drawer covers the header itself, so the reservation is dropped there.
+    act(() => { instance.actions.toggleSidebar() })
+    expect(frame.style.getPropertyValue('--dsh-frame-leading-inset')).toBe('')
+  })
+
+  it('keeps the inline rail on tablets (no floating control above the breakpoint)', () => {
+    frameWidth = 700
+    const { frame, slotCalls } = mountFrame()
+    expect(tracks(frame)).toEqual([SIDEBAR_COLLAPSED, 0])
+    expect(frame.hasAttribute('data-sidebar-floating')).toBe(false)
+    expect(frame.style.getPropertyValue('--dsh-frame-leading-inset')).toBe('')
+    expect(slotCalls.filter(c => c.key === 'sidebar').at(-1)!.props)
+      .toEqual({ collapsed: true, width: SIDEBAR_COLLAPSED, floating: false })
+  })
+
+  it('restores the inline rail track when a phone widens past the breakpoint', () => {
+    frameWidth = 375
+    const { frame } = mountFrame()
+    expect(tracks(frame)).toEqual([0, 0])
+    frameWidth = 700
+    act(() => { fireResize?.(); vi.advanceTimersByTime(20) })
+    expect(tracks(frame)).toEqual([SIDEBAR_COLLAPSED, 0])
+    expect(frame.hasAttribute('data-sidebar-floating')).toBe(false)
+    expect(frame.style.getPropertyValue('--dsh-frame-leading-inset')).toBe('')
   })
 })

@@ -40,6 +40,22 @@ describe('SidebarRoot.module.css', () => {
     expect(declarations('.collapsed .regionArea')?.get('margin-right')).toBe('0')
   })
 
+  it('gives the phone floating control its own fill and icon swap', () => {
+    // Over the conversation the button needs a resting fill of its own: the
+    // rail's transparent circle only works against the sidebar column.
+    const toggle = declarations('.floatingToggle')
+    expect(toggle?.get('width')).toBe('36px')
+    expect(toggle?.get('height')).toBe('36px')
+    expect(toggle?.get('background')).toBe('var(--dsw-specific-sidebar-fill)')
+    // The whale/panel swap is rekeyed off .floatingToggle — this state carries
+    // no .collapsed class, so the rail's descendant rules never apply.
+    expect(declarations('.floatingToggle .panelIcon')?.get('display')).toBe('none')
+    expect(declarations('.floatingToggle:hover .panelIcon')?.get('display')).toBe('inline')
+    expect(declarations('.floatingToggle:hover .railFish')?.get('display')).toBe('none')
+    // The wrapper is the button's box only: no column fill or stretched height.
+    expect(declarations('.floatingRoot')?.get('padding')).toBe('6px 0 0 6px')
+  })
+
   it('moves the four upper controls while the settings seat only fades', () => {
     const animation = 'rail-in 150ms var(--ds-ease-in-out) backwards'
     for (const selector of [

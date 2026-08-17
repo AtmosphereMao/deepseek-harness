@@ -22,14 +22,79 @@
   }
 }
 
+/* Every column pins its track explicitly instead of relying on grid
+   auto-placement. The phone states take the sidebar out of flow
+   (position: absolute), and under auto-placement that shifted every later child
+   up one track — the conversation landed on the 0px sidebar track and details
+   inherited the 1fr center, leaving the chat invisible. Explicit columns keep
+   each occupant on its own track no matter which siblings are positioned. */
 .sidebarCol {
+  grid-column: 1;
   min-width: 0;
   overflow: hidden;
   background: var(--dsw-specific-sidebar-fill);
   border-right: 1px solid var(--dsw-alias-border-l1);
 }
 
+/* Phone drawer: the expanded sidebar floats above a full-width center instead
+   of taking a grid track. The scrim dims the center (mask tokens match the
+   settings modal) and closes the drawer on tap; the drawer slides in from the
+   left while the collapsed rail track closes. Both sit below the shell overlay
+   layer so frame-wide surfaces stay on top. */
+.scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 15;
+  background: var(--dsw-alias-bg-mask-1);
+  backdrop-filter: var(--dsw-mask-blur);
+  animation: scrim-in var(--ds-transition-duration-slow) var(--ds-ease-in-out);
+}
+
+.sidebarOverlay {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 16;
+  box-shadow: var(--dsw-shadow-lv3);
+  animation: drawer-in var(--ds-transition-duration-slow) var(--ds-ease-in-out);
+}
+
+/* Phone collapsed state: instead of a full-height 56px rail track (a sixth of a
+   375px screen) the column shrinks to a floating control box in the leading
+   corner, sized to the toggle alone. It keeps no fill and no border — the
+   conversation shows through around the button — and stays above the center so
+   the tap lands on it, but below the shell overlay layer. `height: auto` (not
+   the stretched grid default) is what keeps the box off the rest of the column,
+   leaving the whole conversation tappable. */
+.sidebarFloating {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 16;
+  height: auto;
+  overflow: visible;
+  background: none;
+  border-right: none;
+}
+
+@keyframes scrim-in {
+  from { opacity: 0; }
+}
+
+@keyframes drawer-in {
+  from { transform: translateX(-100%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scrim,
+  .sidebarOverlay {
+    animation: none;
+  }
+}
+
 .centerCol {
+  grid-column: 2;
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -37,6 +102,7 @@
 }
 
 .detailsCol {
+  grid-column: 3;
   min-width: 0;
   overflow: hidden;
   border-left: 1px solid var(--dsw-alias-border-l2);

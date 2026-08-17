@@ -96,6 +96,14 @@ export interface SidebarOwnerProps {
   collapsed: boolean
   /** Rendered column width in px (SIDEBAR_COLLAPSED when collapsed). */
   width: number
+  /**
+   * True on phone viewports (below SIDEBAR_OVERLAY_BREAKPOINT), where the
+   * column takes no grid track and is positioned over the center instead:
+   * `collapsed` then renders as a single floating toggle button rather than the
+   * full-height rail, and expanded renders as the drawer. Registrants that only
+   * care about wide-vs-rail content can keep ignoring this.
+   */
+  floating: boolean
 }
 
 /** Conversation owner share: business state and actions belong to the registrant. */
