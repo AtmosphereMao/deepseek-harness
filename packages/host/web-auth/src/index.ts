@@ -89,7 +89,10 @@ export async function readPasswordBody(req: IncomingMessage): Promise<string | u
   if (!contentType.includes('application/x-www-form-urlencoded')) return undefined
   const chunks: Buffer[] = []
   let size = 0
-  for await (const chunk of req) {
+  // IncomingMessage's async iterator is typed `any`; narrow at the boundary so
+  // the body assembly below stays type-safe.
+  const body$ = req as AsyncIterable<Buffer | string>
+  for await (const chunk of body$) {
     const buf = typeof chunk === 'string' ? Buffer.from(chunk) : chunk
     size += buf.length
     if (size > MAX_PASSWORD_BODY_BYTES) return undefined

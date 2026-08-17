@@ -21,16 +21,19 @@ afterEach(() => {
 // props share; stub them as never-called functions.
 const neverHook = (() => { throw new Error('shell must not read global hooks') }) as never
 
-function mountShell({ collapsed = false, width = 300 }: { collapsed?: boolean; width?: number } = {}) {
+function mountShell(
+  { collapsed = false, width = 300, floating = false }:
+  { collapsed?: boolean; width?: number; floating?: boolean } = {},
+) {
   const startSession = vi.fn()
   const toggleSidebar = vi.fn()
   let regionOwner: SidebarSectionOwnerProps | undefined
   let settingsOwner: SidebarSettingsOwnerProps | undefined
   let footerActionOwner: SidebarFooterActionOwnerProps | undefined
-  let current = { collapsed, width }
+  let current = { collapsed, width, floating }
   const root = () => (
     <SidebarRoot
-      collapsed={current.collapsed} width={current.width}
+      collapsed={current.collapsed} width={current.width} floating={current.floating}
       useSessions={neverHook} useWorkspaces={neverHook}
       startSession={startSession} toggleSidebar={toggleSidebar} t={t}
       renderSlot={((
@@ -115,5 +118,44 @@ describe('SidebarRoot shell', () => {
     const b = mountShell({ collapsed: true })
     expect(b.regionOwner().wide).toBe(false)
     expect(screen.getByRole('button', { name: 'Open sidebar' })).toBeTruthy()
+  })
+})
+
+describe('SidebarRoot shell — phone floating control', () => {
+  it('collapses to a single open button, dropping the rest of the rail', () => {
+    mountShell({ collapsed: true, floating: true })
+    // The one control the state keeps; tapping it opens the drawer.
+    const open = screen.getByRole('button', { name: 'Open sidebar' })
+    expect(open).toBeTruthy()
+    expect(screen.getAllByRole('button')).toHaveLength(1)
+    // No rail chrome painted over the conversation: no New Session capsule and
+    // no region/settings/footer seats (the drawer carries them one tap later).
+    expect(screen.queryByRole('button', { name: 'New session' })).toBeNull()
+    expect(screen.queryByTestId('region')).toBeNull()
+    expect(screen.queryByTestId('settings-seat')).toBeNull()
+    expect(screen.queryByTestId('footer-action-seat')).toBeNull()
+  })
+
+  it('routes the floating button through toggleSidebar', () => {
+    const b = mountShell({ collapsed: true, floating: true })
+    fireEvent.click(screen.getByRole('button', { name: 'Open sidebar' }))
+    expect(b.toggleSidebar).toHaveBeenCalledOnce()
+  })
+
+  it('renders the full drawer content once opened while still floating', () => {
+    const b = mountShell({ collapsed: true, floating: true })
+    b.rerender({ collapsed: false })
+    // Expanded-over-the-center is the ordinary wide shell, seats and all.
+    expect(b.regionOwner().wide).toBe(true)
+    expect(screen.getByTestId('settings-seat')).toBeTruthy()
+    expect(screen.getAllByRole('button', { name: 'New session' })).toHaveLength(2)
+  })
+
+  it('keeps the inline rail when collapsed without the floating flag (tablet)', () => {
+    const b = mountShell({ collapsed: true, floating: false })
+    // The rail still paints its controls: it owns a real column track there.
+    expect(b.regionOwner().wide).toBe(false)
+    expect(screen.getByTestId('settings-seat')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'New session' })).toBeTruthy()
   })
 })

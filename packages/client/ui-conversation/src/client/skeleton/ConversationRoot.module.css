@@ -25,10 +25,16 @@
   --dsh-composer-dock-inset: 8px;
 }
 
+/* The leading pad absorbs the frame's floating sidebar control when there is
+   one: on phones AppFrame drops the sidebar track and positions the collapsed
+   column over this column's leading corner, publishing its width as
+   --dsh-frame-leading-inset (unset elsewhere, so desktop geometry is
+   unchanged). Only this header row pads for it — the scrollport below keeps the
+   full column width, which is the point of dropping the track. */
 .header {
   position: relative;
   flex: none;
-  padding: 12px 28px 0 20px;
+  padding: 12px 28px 0 calc(20px + var(--dsh-frame-leading-inset, 0px));
   border-bottom: 1px solid transparent;
 }
 

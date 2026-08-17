@@ -13,7 +13,10 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { PropsRenderSlots, PropsRuntime, PropsStore } from '@deepseek-ai/dsh-client-ui-slots'
-import { computeColumns, SIDEBAR_AUTO_COLLAPSE, SIDEBAR_DEFAULT } from './columns.ts'
+import {
+  computeColumns, SIDEBAR_AUTO_COLLAPSE, SIDEBAR_DEFAULT, SIDEBAR_FLOATING_INSET,
+  SIDEBAR_OVERLAY_BREAKPOINT, SIDEBAR_OVERLAY_MAX_RATIO,
+} from './columns.ts'
 import type { createLayoutStore } from './stores.ts'
 import css from './AppFrame.module.css'
 
@@ -143,6 +146,17 @@ export function AppFrame({
   const colsRef = useRef(cols)
   colsRef.current = cols
 
+  // Phones give the sidebar no grid track in EITHER fold state: below the
+  // overlay breakpoint a 56px rail is a sixth of a 375px screen, and a track at
+  // the 264px drag floor leaves the center unreadable. Collapsed becomes a
+  // floating control box over a full-width center; expanded becomes the drawer
+  // below. Tablets (breakpoint..SIDEBAR_AUTO_COLLAPSE) keep both inline.
+  const phone = narrow && viewport < SIDEBAR_OVERLAY_BREAKPOINT
+  const floating = phone && sidebarCollapsed
+  const overlay = phone && !sidebarCollapsed
+  const overlayWidth = overlay ? Math.min(sidebarPreference, Math.round(viewport * SIDEBAR_OVERLAY_MAX_RATIO)) : 0
+  const sidebarWidth = overlay ? overlayWidth : floating ? SIDEBAR_FLOATING_INSET : cols.sidebar
+
   // The drag base is the rendered width captured at drag start (grabbing a
   // concession-clamped panel must not jump back to the stored preference);
   // it stays frozen for the whole gesture so dx deltas do not compound.
@@ -165,20 +179,40 @@ export function AppFrame({
     <div
       ref={frameRef}
       className={css.frame}
-      style={{ gridTemplateColumns: `${cols.sidebar}px minmax(0, 1fr) ${cols.details}px` }}
+      style={{
+        // Both phone states yield the track; the center then spans the viewport.
+        gridTemplateColumns: phone
+          ? `0px minmax(0, 1fr) ${cols.details}px`
+          : `${cols.sidebar}px minmax(0, 1fr) ${cols.details}px`,
+        // Leading room for the floating control, consumed by row chrome that
+        // starts at the center's leading edge (conversation header).
+        ...floating ? { '--dsh-frame-leading-inset': `${SIDEBAR_FLOATING_INSET}px` } as React.CSSProperties : {},
+      }}
       data-sidebar-collapsed={sidebarCollapsed || undefined}
+      data-sidebar-floating={floating || undefined}
+      data-sidebar-overlay={overlay || undefined}
       data-details-collapsed={cols.details === 0 || undefined}
       data-dragging={dragging || undefined}
     >
-      <div className={css.sidebarCol}>
+      {overlay && (
+        <div className={css.scrim} aria-hidden="true" onClick={() => { actions.toggleSidebar() }} />
+      )}
+      <div
+        className={[css.sidebarCol, overlay && css.sidebarOverlay, floating && css.sidebarFloating]
+          .filter(Boolean).join(' ')}
+        style={overlay || floating ? { width: sidebarWidth } : undefined}
+      >
         {/* Render-site slot call with live concession output: a closed
             sidebar keeps the mounted slot at the compact-rail width, and the
             component sees its rendered state as owner params decided here
             (collapsed follows the resolved rail, so a derived auto-collapse
-            renders the rail UI too). */}
+            renders the rail UI too). On phones `floating` tells the shell it is
+            positioned over the center: collapsed then renders one toggle button
+            at the inset width, expanded the capped drawer. */}
         {renderSlot('sidebar', {
           collapsed: sidebarCollapsed,
-          width: cols.sidebar,
+          width: sidebarWidth,
+          floating: phone,
         })}
       </div>
       <>
@@ -193,8 +227,10 @@ export function AppFrame({
       <div className={css.overlayLayer} data-shell-overlay>
         {renderSlot('shell.overlay', {})}
       </div>
-      {/* The collapsed rail is fixed-width: no resize handle while closed. */}
-      {!sidebarCollapsed && <DragHandle side="sidebar" left={cols.sidebar} onStart={onSidebarStart} onDrag={onSidebarDrag} onEnd={onDragEnd} />}
+      {/* The collapsed rail is fixed-width: no resize handle while closed; no
+          phone state has one either (the drawer's width is capped, not dragged,
+          and the floating control is not a column edge). */}
+      {!sidebarCollapsed && !phone && <DragHandle side="sidebar" left={cols.sidebar} onStart={onSidebarStart} onDrag={onSidebarDrag} onEnd={onDragEnd} />}
       {cols.details > 0 && <DragHandle side="details" left={viewport - cols.details} onStart={onDetailsStart} onDrag={onDetailsDrag} onEnd={onDragEnd} />}
     </div>
   )
