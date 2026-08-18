@@ -222,6 +222,29 @@ describe('image draft rail', () => {
     expect(shell.snapshot.draft).toBe('同时粘贴的文字')
   })
 
+  it('opens the image picker from the upload button and routes the selection through intake', () => {
+    const addImages = vi.fn(() => null)
+    const { view } = bench({ addImages })
+    const upload = view.getByRole('button', { name: '上传图片' }) as HTMLButtonElement
+    const picker = view.container.querySelector<HTMLInputElement>('input[type="file"]')!
+    expect(upload.disabled).toBe(false)
+    // The picker is restricted to the formats the intake accepts.
+    expect(picker.accept).toBe('image/png,image/jpeg,image/webp,image/gif')
+    expect(picker.multiple).toBe(true)
+    // The button is the only pointer to the hidden input.
+    const open = vi.spyOn(picker, 'click')
+    fireEvent.click(upload)
+    expect(open).toHaveBeenCalledTimes(1)
+    const image = new File([Uint8Array.of(1)], 'picked.png', { type: 'image/png' })
+    fireEvent.change(picker, { target: { files: [image] } })
+    expect(addImages).toHaveBeenCalledWith([image])
+  })
+
+  it('disables the upload button while the composer cannot accept images', () => {
+    const { view } = bench({ inert: true })
+    expect((view.getByRole('button', { name: '上传图片' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
   it('accepts a drop anywhere on the page under the full-page overlay', () => {
     const addImages = vi.fn(() => null)
     const { view } = bench({ addImages })

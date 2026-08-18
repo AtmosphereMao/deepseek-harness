@@ -10,7 +10,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import type { ChangeEvent, KeyboardEvent, MouseEvent, ReactNode } from 'react'
 import clsx from 'clsx'
 import {
-  IconPlusOutline16, IconWarningOutline16, Toast, Tooltip,
+  IconImageOutline16, IconPlusOutline16, IconWarningOutline16, Toast, Tooltip,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import { AttachmentRail, DropOverlay, ImageLightbox } from '@deepseek-ai/dsh-client-ui-attachment'
 import type { AttachmentRailItem } from '@deepseek-ai/dsh-client-ui-attachment'
@@ -109,6 +109,10 @@ export function InputBar({
   const mirrorRef = useRef<HTMLDivElement | null>(null)
   const safari = useMemo(() => isSafariBrowser(navigator), [])
   const safariNativeShrinkRef = useRef(false)
+  // Hidden picker behind the upload button: a pointerless channel to the same
+  // intake the paste/drop paths use, so a mobile browser (no clipboard-file
+  // paste, no drag) can still add images.
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
   // IME guard: composition Enter picks a candidate, it must not send. The ref outlives renders;
   // clearing is deferred one tick because Safari delivers the closing keydown AFTER compositionend.
   const composingRef = useRef(false)
@@ -464,6 +468,17 @@ export function InputBar({
     if (rejected !== null) showToast(rejected)
   }, [addImages, attachments, imageLimits, showToast, t])
 
+  // The upload button opens the OS image picker; selection lands on the hidden
+  // input below and routes through the same intake as paste and drop.
+  const openImagePicker = (): void => {
+    fileInputRef.current?.click()
+  }
+  const onImagePicked = (event: ChangeEvent<HTMLInputElement>): void => {
+    intakeImages([...(event.target.files ?? [])])
+    // Clear so re-selecting the same file still fires `change`.
+    event.target.value = ''
+  }
+
   // Whole-page file-drop intake (DeepSeek Chat behavior): the listeners live
   // on the document so a drop anywhere over the window adds images, not only
   // over the composer card. Safe as document-level state: the composer-bar
@@ -747,6 +762,26 @@ export function InputBar({
         </div>
         <div className={css.row}>
           <div className={css.tools}>
+            <Tooltip label={t('input.uploadImage')} side="top" delayMs={500}>
+              <button
+                type="button"
+                className={css.add}
+                aria-label={t('input.uploadImage')}
+                disabled={!canAcceptDrop}
+                onMouseDown={keepFocus}
+                onClick={openImagePicker}
+              >
+                <IconImageOutline16 size={14} />
+              </button>
+            </Tooltip>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif"
+              multiple
+              className={css.filePicker}
+              onChange={onImagePicked}
+            />
             <Tooltip label={t('input.commands')} side="top" delayMs={500}>
               <button
                 type="button"

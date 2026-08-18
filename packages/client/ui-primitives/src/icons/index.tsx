@@ -125,6 +125,20 @@ export const IconPlusOutline16 = ({ size = 16, className }: IconProps) => (
   </svg>
 )
 
+/** image_outline_16 (composer upload-button glyph; picture frame with sun and mountain). */
+export const IconImageOutline16 = ({ size = 16, className }: IconProps) => (
+  <svg width={size} height={size} className={className} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path
+      fillRule="evenodd"
+      clipRule="evenodd"
+      d="M3.5 2.5H12.5A2 2 0 0 1 14.5 4.5V11.5A2 2 0 0 1 12.5 13.5H3.5A2 2 0 0 1 1.5 11.5V4.5A2 2 0 0 1 3.5 2.5ZM4 4H12A1 1 0 0 1 13 5V11A1 1 0 0 1 12 12H4A1 1 0 0 1 3 11V5A1 1 0 0 1 4 4Z"
+      fill="currentColor"
+    />
+    <path d="M5.5 5.35A1.15 1.15 0 1 1 5.5 7.65A1.15 1.15 0 1 1 5.5 5.35Z" fill="currentColor" />
+    <path d="M3 12L6.3 8.4L8.1 10.5L9.9 8.9L13 12Z" fill="currentColor" />
+  </svg>
+)
+
 /** ic_ds_check_outline_16 */
 export const IconCheckOutline16 = ({ size = 16, className }: IconProps) => (
   <svg width={size} height={size} className={className} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
