@@ -127,6 +127,10 @@ Selection never depends on registration, config, or HMR order: a capability has 
 
 `WebError extends HarnessError` ([core.md](core.md) error taxonomy) with a `code: string` (open, like every other seam's error — `LlmError`, `SubagentError`), not a closed union: a provider may raise its own codes without editing `dsh-web`, and consumers must tolerate an unknown code. The codes split by owner. Seam-neutral codes are raised by the shared `WebRuntime` contract: `WEB_PROVIDER_UNAVAILABLE`, `WEB_PROVIDER_CONFIGURED_MISSING`, `WEB_PROVIDER_CONFIGURED_UNAVAILABLE`, `WEB_PROVIDER_AMBIGUOUS`, `WEB_DUPLICATE_PROVIDER` (a registration-time programming error, the analogue of `LlmRuntime`'s `DUPLICATE_ADAPTER`), `WEB_ABORTED`, and `WEB_PROVIDER_ERROR` (the catch-all for a provider's own failure surfaced through the seam, including network/transport failure — DNS, connection refused, TLS). Fetch-transport codes are owned by the `dsh-web-fetch-http` implementation and a different fetch backend need not raise them: `WEB_INVALID_URL`, `WEB_BLOCKED_URL`, `WEB_REDIRECT_BLOCKED`, `WEB_FETCH_TOO_LARGE`, `WEB_FETCH_TIMEOUT`, `WEB_UNSUPPORTED_CONTENT_TYPE`.
 
+## HTTP transport
+
+Every web provider — and the DeepSeek chat adapter — reaches the network through the shared [`ctx.http` transport](../../packages/http/http/README.md), not the global `fetch` directly. The transport applies an optional HTTP(S) proxy read live from the `http:` settings namespace (written by the Network settings page), so one proxy reaches every outbound request; an absent proxy means direct transport. Consumers resolve the transport per request through `ctx.get('http')` and fall back to the global `fetch`, so a provider still works when the transport is not mounted. Only `http:`/`https:` proxy URLs are accepted; the package README documents the SOCKS and `llm-pi-ai` streaming limitations.
+
 ## The service
 
 `WebRuntime` registers search and fetch providers, rejects duplicate ids with `WEB_DUPLICATE_PROVIDER`, and resolves providers at execution time with structured selection errors. The local fetch backend accepts only HTTP(S), rejects credentials, caps redirects, bytes, characters, and time, revalidates every same-origin redirect hop, and decodes the body; the tool owns presentation. The local backend does not block private-network targets; do not enable `web_fetch` where it can reach sensitive internal ones.
@@ -138,6 +142,25 @@ Selection never depends on registration, config, or HMR order: a capability has 
 ## Cordis API
 
 Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnpm run verify-cordis-catalog` in doc-sync; regenerate with `pnpm run gen-cordis-catalog`) — this section is byte-identical in both language sides of the page. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
+
+<a id="ctxhttp--httptransport"></a>
+
+### `ctx.http` — `HttpTransport`
+
+The shared HTTP transport service. Provides HttpTransport.fetch, which applies the currently resolved proxy (when one is configured) as an undici dispatcher on every request and otherwise defers to the global `fetch`. The proxy dispatcher is rebuilt only when the resolved proxy URL changes, so steady-state requests never pay construction cost.
+
+```ts cordis-catalog
+/**
+ * Perform one outbound request through the shared transport. Identical to
+ * the global `fetch` except that a configured proxy dispatcher is applied.
+ * @param input - the request URL (or a Request).
+ * @param init - standard fetch options (method, headers, body, signal, redirect, ...).
+ * @returns the standard fetch `Response`.
+ */
+async fetch(input: string | URL, init?: RequestInit): Promise<Response>
+```
+
+Source: [`packages/http/http/src/index.ts:77`](../../packages/http/http/src/index.ts)
 
 <a id="ctxweb--webruntime"></a>
 

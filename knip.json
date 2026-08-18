@@ -704,6 +704,16 @@
         "tests/**/*.ts"
       ]
     },
+    "packages/client/ui-settings-network": {
+      "entry": [
+        "tests/**/*.spec.tsx"
+      ],
+      "project": [
+        "src/**/*.ts",
+        "src/**/*.tsx",
+        "tests/**/*.tsx"
+      ]
+    },
     "apps/web": {
       "entry": [
         "tests/**/*.e2e.ts",

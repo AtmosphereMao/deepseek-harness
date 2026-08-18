@@ -107,6 +107,12 @@ export interface DeepSeekSearchProviderOptions {
    * prevents dispatch so model-visible auxiliary input cannot escape logging.
    */
   recordRequest?: (request: DeepSeekSearchLlmRequest) => void
+  /**
+   * Transport used for the Messages request; defaults to the global `fetch`.
+   * The registering plugin supplies the shared `ctx.http` transport so a
+   * configured proxy reaches the next search.
+   */
+  fetch?: (input: string | URL, init?: RequestInit) => Promise<Response>
 }
 
 /**
@@ -219,7 +225,8 @@ export class DeepSeekSearchProvider implements WebSearchProvider {
     throwIfSearchAborted(signal)
     let response: Response
     try {
-      response = await fetch(endpoint, {
+      const transportFetch = options.fetch ?? fetch
+      response = await transportFetch(endpoint, {
         method: 'POST',
         redirect: 'error',
         headers: {

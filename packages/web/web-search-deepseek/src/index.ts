@@ -13,6 +13,8 @@ import { installSettingsSection, settingsNamespace } from '@deepseek-ai/dsh-sett
 import { launchEnvironmentOf } from '@deepseek-ai/dsh-launch-environment'
 import type {} from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-web'
+// Type-only: pulls the ctx.http Context merge for the optional shared transport.
+import type {} from '@deepseek-ai/dsh-http'
 import {
   DeepSeekSearchProvider,
   DEEPSEEK_DEFAULT_API_VERSION,
@@ -119,6 +121,12 @@ function resolveOptions(ctx: Context, config: Config): DeepSeekSearchProviderOpt
         'web/deepseek-search-llm-request',
         request,
       )
+    },
+    // Resolve the shared transport per search, so a proxy changed after mount
+    // reaches the next request; absent the transport the provider stays direct.
+    fetch: (input, init) => {
+      const http = ctx.get('http')
+      return http === undefined ? fetch(input, init) : http.fetch(input, init)
     },
   }
 }

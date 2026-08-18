@@ -83,6 +83,12 @@ export interface DeepSeekAdapterOptions {
   resolveApiKey: (connection: DeepSeekConnectionOptions) => Promise<string>
   /** Resolve the harness-home anonymous id shared with telemetry and feedback. */
   resolveUserId: () => AnonymousUserId
+  /**
+   * Transport used for the HTTP request; defaults to the global `fetch`. The
+   * registering plugin supplies the shared `ctx.http` transport so a configured
+   * proxy reaches the very next request.
+   */
+  fetch?: (input: string | URL, init?: RequestInit) => Promise<Response>
 }
 
 /** Default maximum idle interval while an adapter stream read is outstanding. */
@@ -298,11 +304,10 @@ export class DeepSeekAdapter extends LlmAdapter {
         : {},
     }
 
-    // TODO(http): adopt the Cordis HTTP service when shared transport configuration
-    // outweighs its additional runtime dependencies.
     let response: Response
     try {
-      response = await fetch(`${connection.baseURL}/chat/completions`, {
+      const transportFetch = this.config.fetch ?? fetch
+      response = await transportFetch(`${connection.baseURL}/chat/completions`, {
         method: 'POST',
         headers,
         body: payload,

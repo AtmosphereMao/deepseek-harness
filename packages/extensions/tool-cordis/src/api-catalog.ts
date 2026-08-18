@@ -716,6 +716,19 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'http',
+    summary: 'The shared HTTP transport service.',
+    description: 'The shared HTTP transport service. Provides HttpTransport.fetch, which applies the currently resolved proxy (when one is configured) as an undici dispatcher on every request and otherwise defers to the global `fetch`. The proxy dispatcher is rebuilt only when the resolved proxy URL changes, so steady-state requests never pay construction cost.',
+    methods: [
+      {
+        signature: 'async fetch(input: string | URL, init?: RequestInit): Promise<Response>',
+        description: 'Perform one outbound request through the shared transport. Identical to the global `fetch` except that a configured proxy dispatcher is applied.',
+        parameters: [{ name: 'input', description: 'the request URL (or a Request).' }, { name: 'init', description: 'standard fetch options (method, headers, body, signal, redirect, ...).' }],
+        returns: 'the standard fetch `Response`.',
+      },
+    ],
+  },
+  {
     key: 'invariants',
     summary: 'Package-owned invariant registry with global and regex-based selection.',
     description: 'Package-owned invariant registry with global and regex-based selection.',
@@ -2088,6 +2101,18 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Register an index.html transform, applied by the fallback owner to every index response (applyIndexTaps) in registration order.',
         parameters: [{ name: 'transform', description: 'pure html-to-html function.' }],
         returns: 'the disposer removing the transform.',
+      },
+      {
+        signature: 'tapRequest(middleware: WebMiddleware): () => void',
+        description: 'Register HTTP request middleware, applied before route dispatch in registration order. Call `next()` to continue; skip it to short-circuit (the middleware owns the response).',
+        parameters: [{ name: 'middleware', description: 'the middleware to run.' }],
+        returns: 'the disposer removing the middleware.',
+      },
+      {
+        signature: 'tapUpgrade(middleware: WebUpgradeMiddleware): () => void',
+        description: 'Register HTTP upgrade (WebSocket) middleware, applied before upgrade route dispatch in registration order. Call `next()` to continue; skip it to short-circuit (the middleware owns socket teardown).',
+        parameters: [{ name: 'middleware', description: 'the middleware to run.' }],
+        returns: 'the disposer removing the middleware.',
       },
       {
         signature: 'applyIndexTaps(html: string): string',
@@ -4568,6 +4593,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface WebFetchResultView {\n    card: \'web\';\n    kind: \'fetch\';\n    title?: string;\n    url: string;\n    statusCode: number;\n    truncated: boolean;\n}',
   },
   {
+    name: 'WebMiddleware',
+    declaration: 'export type WebMiddleware = (req: IncomingMessage, res: ServerResponse, next: WebMiddlewareNext) => void | Promise<void>;',
+  },
+  {
+    name: 'WebMiddlewareNext',
+    declaration: 'export type WebMiddlewareNext = () => void | Promise<void>;',
+  },
+  {
     name: 'WebResultView',
     declaration: 'export type WebResultView = WebSearchResultView | WebFetchResultView;',
   },
@@ -4602,6 +4635,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'WebSource',
     declaration: 'export interface WebSource {\n    url: string;\n    title?: string;\n    snippet?: string;\n    publishedAt?: string;\n}',
+  },
+  {
+    name: 'WebUpgradeMiddleware',
+    declaration: 'export type WebUpgradeMiddleware = (req: IncomingMessage, socket: Duplex, next: WebMiddlewareNext) => void | Promise<void>;',
   },
   {
     name: 'WebUpgradeRoute',

@@ -45,6 +45,12 @@ export interface PerplexitySearchProviderOptions {
   maxTokens: number
   /** Optional recency window sent as `search_recency_filter`; omitted = no filter. */
   searchRecency?: PerplexityRecency
+  /**
+   * Transport used for the search request; defaults to the global `fetch`. The
+   * registering plugin supplies the shared `ctx.http` transport so a configured
+   * proxy reaches the next search.
+   */
+  fetch?: (input: string | URL, init?: RequestInit) => Promise<Response>
 }
 
 /**
@@ -101,7 +107,8 @@ export class PerplexitySearchProvider implements WebSearchProvider {
   async search(request: WebSearchRequest, signal?: AbortSignal): Promise<WebSearchResult> {
     let response: Response
     try {
-      response = await fetch(`${this.options.baseURL}/chat/completions`, {
+      const transportFetch = this.options.fetch ?? fetch
+      response = await transportFetch(`${this.options.baseURL}/chat/completions`, {
         method: 'POST',
         redirect: 'error',
         headers: {

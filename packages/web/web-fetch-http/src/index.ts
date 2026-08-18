@@ -10,6 +10,8 @@
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/dsh-web'
+// Type-only: pulls the ctx.http Context merge for the optional shared transport.
+import type {} from '@deepseek-ai/dsh-http'
 import { HttpFetchProvider } from './provider.ts'
 import type { HttpFetchLimits } from './provider.ts'
 
@@ -97,5 +99,11 @@ export function apply(ctx: Context, config: Config): void {
     maxRedirects: resolved.maxRedirects,
     userAgent: resolved.userAgent,
   }
-  ctx.web.registerFetchProvider(new HttpFetchProvider(limits))
+  // Resolve the shared transport per request, so a proxy changed after mount
+  // reaches the next fetch; absent the transport, the provider stays direct.
+  const transport = (input: string | URL, init?: RequestInit): Promise<Response> => {
+    const http = ctx.get('http')
+    return http === undefined ? fetch(input, init) : http.fetch(input, init)
+  }
+  ctx.web.registerFetchProvider(new HttpFetchProvider(limits, transport))
 }

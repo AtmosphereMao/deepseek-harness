@@ -96,6 +96,24 @@ registerFallback(handler: WebRoute['handler']): () => void
 tapIndex(transform: (html: string) => string): () => void
 
 /**
+ * Register HTTP request middleware, applied before route dispatch in
+ * registration order. Call `next()` to continue; skip it to short-circuit
+ * (the middleware owns the response).
+ * @param middleware - the middleware to run.
+ * @returns the disposer removing the middleware.
+ */
+tapRequest(middleware: WebMiddleware): () => void
+
+/**
+ * Register HTTP upgrade (WebSocket) middleware, applied before upgrade route
+ * dispatch in registration order. Call `next()` to continue; skip it to
+ * short-circuit (the middleware owns socket teardown).
+ * @param middleware - the middleware to run.
+ * @returns the disposer removing the middleware.
+ */
+tapUpgrade(middleware: WebUpgradeMiddleware): () => void
+
+/**
  * Run an index.html body through the registered taps in registration order
  * — called by the fallback owner on every index response it renders.
  * @param html - the raw index.html body.
@@ -104,5 +122,5 @@ tapIndex(transform: (html: string) => string): () => void
 applyIndexTaps(html: string): string
 ```
 
-Source: [`packages/host/webserver/src/index.ts:59`](../../packages/host/webserver/src/index.ts)
+Source: [`packages/host/webserver/src/index.ts:102`](../../packages/host/webserver/src/index.ts)
 <!-- END GENERATED cordis-surface -->

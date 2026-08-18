@@ -11,6 +11,8 @@ import type { Context } from '@deepseek-ai/cordis'
 import { launchEnvironmentOf } from '@deepseek-ai/dsh-launch-environment'
 import z from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/dsh-web'
+// Type-only: pulls the ctx.http Context merge for the optional shared transport.
+import type {} from '@deepseek-ai/dsh-http'
 import { PerplexitySearchProvider, PERPLEXITY_DEFAULT_BASE_URL, PERPLEXITY_DEFAULT_MAX_TOKENS, PERPLEXITY_DEFAULT_MODEL } from './provider.ts'
 
 export {
@@ -60,5 +62,9 @@ export function apply(ctx: Context, config: Config): void {
     model: config.model ?? PERPLEXITY_DEFAULT_MODEL,
     maxTokens: config.maxTokens ?? PERPLEXITY_DEFAULT_MAX_TOKENS,
     ...config.searchRecency !== undefined ? { searchRecency: config.searchRecency } : {},
+    fetch: (input, init) => {
+      const http = ctx.get('http')
+      return http === undefined ? fetch(input, init) : http.fetch(input, init)
+    },
   }))
 }

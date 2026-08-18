@@ -1389,6 +1389,7 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
       'client-ui-agent-preset AgentPresetSection id \'agent-presets\'',
       'client-ui-settings-general GeneralSection id \'general\'',
       'client-ui-settings-models ModelsSection id \'models\'',
+      'client-ui-settings-network NetworkSection id \'network\'',
       'client-ui-settings-plugins PluginsSettingsSection id \'plugins\'',
     ],
     replaceRisk: 'none',
@@ -1470,7 +1471,7 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
     doc: 'The whole left column. OCCUPIED by ui-sidebar\'s SidebarRoot, which\ndeclares the workspace and settings seats inside it — registering here\nreplaces the navigation column outright rather than adding to it, and\nthe seats it declares disappear with it. To add something to the\nsidebar, register into one of those inner seats instead.\n\nThe occupant receives the frame\'s live column state (collapsed, width)\nand is expected to render the compact control rail while collapsed.',
     registerOptions: [],
     ownerProps: [
-      '/** Sidebar owner share: live column state from the frame\'s concession solve. */\nexport interface SidebarOwnerProps {\n  /** True when the sidebar is closed (the column renders the compact control rail). */\n  collapsed: boolean\n  /** Rendered column width in px (SIDEBAR_COLLAPSED when collapsed). */\n  width: number\n}',
+      '/** Sidebar owner share: live column state from the frame\'s concession solve. */\nexport interface SidebarOwnerProps {\n  /** True when the sidebar is closed (the column renders the compact control rail). */\n  collapsed: boolean\n  /** Rendered column width in px (SIDEBAR_COLLAPSED when collapsed). */\n  width: number\n  /**\n   * True on phone viewports (below SIDEBAR_OVERLAY_BREAKPOINT), where the\n   * column takes no grid track and is positioned over the center instead:\n   * `collapsed` then renders as a single floating toggle button rather than the\n   * full-height rail, and expanded renders as the drawer. Registrants that only\n   * care about wide-vs-rail content can keep ignoring this.\n   */\n  floating: boolean\n}',
     ],
     ownerPropsReferences: [],
     standardProps: [
