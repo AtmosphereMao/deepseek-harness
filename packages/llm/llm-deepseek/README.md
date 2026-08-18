@@ -120,6 +120,6 @@ Loop-retained response blocks append to the next request and preserve its earlie
 
 - **A settings `models` list replaces the composition list wholesale** — settings-layer merging is per-field, and arrays are one field; per-entry catalog merging would need a keyed shape.
 - **`tool_choice` is not mapped** — not part of the core vocabulary (MVP cut, shared with the pi-ai twin).
-- **Requests use raw `fetch`, not `@cordisjs/plugin-http`** — no shared proxy/interception configuration; adoption is deferred until a second adapter wants it (`TODO(http)`).
+- **No per-provider proxy** — requests resolve the shared `ctx.http` transport per call (falling back to the global `fetch` when it is absent), so the one configured proxy covers the adapter; a distinct route still needs a distinct `baseURL`.
 - **Plugin-added content block types are skipped** — core text and supported image blocks are serialized, and empty tool output crosses the wire as the literal `(no output)`.
 - **Images are input-only durable attachments** — direct external URLs, the Files API, and assistant image output are not supported.

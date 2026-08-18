@@ -263,7 +263,7 @@ function forwardedSettings(ns: string): HostFrame {
     type: 'host/remote-event',
     event: 'settings/document-updated',
     // The revision is the Host's own counter, so the matcher is the assertion.
-    args: [ns, expect.any(Number)], // oxlint-disable-line typescript/no-unsafe-assignment
+    args: [ns, expect.any(Number)],
   }
 }
 
@@ -385,12 +385,15 @@ describe('settings domain', () => {
     ctx.settings.register(settingsNamespace('web-search-deepseek'), z.object({
       baseURL: z.string(),
     }))
+    ctx.settings.register(settingsNamespace('http'), z.object({
+      proxy: z.string(),
+    }))
     const api = createApiProxy(ctx, DEFAULTS)
 
     const value = expectOk(await api.settings.describe(request({})))
     expect(value.namespaces.map(view => view.ns)).toEqual([
       'llm-deepseek', 'some-other-plugin', 'permission', 'ui-theme', 'locale',
-      'ui-conversation', 'shell', 'agent-loop', 'web-search-deepseek',
+      'ui-conversation', 'shell', 'agent-loop', 'web-search-deepseek', 'http',
     ])
     const permission = expectOk(await api.settings.mutate(request({
       ns: 'permission',
@@ -427,6 +430,11 @@ describe('settings domain', () => {
       ops: [{ op: 'set', path: ['baseURL'], value: 'https://search.test/v1' }],
     })))
     expect(webSearch.value).toEqual({ baseURL: 'https://search.test/v1' })
+    const http = expectOk(await api.settings.mutate(request({
+      ns: 'http',
+      ops: [{ op: 'set', path: ['proxy'], value: 'http://127.0.0.1:7890' }],
+    })))
+    expect(http.value).toEqual({ proxy: 'http://127.0.0.1:7890' })
 
     const other = expectOk(await api.settings.update(request({
       ns: 'some-other-plugin',

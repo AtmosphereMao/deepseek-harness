@@ -188,6 +188,9 @@ function usableProbeKey(raw: string): string {
  *   network. A configuration surface never holds a stored secret — it edits a
  *   redacted descriptor — so without this an already-configured route would be
  *   interrogated unauthenticated and answer 401.
+ * @param fetchImpl - transport for the probe request; defaults to the global
+ *   `fetch`. The plugin supplies the shared `ctx.http` transport so a configured
+ *   proxy reaches the discovery request.
  * @returns the advertised models in endpoint order.
  * @throws LlmError when the protocol has no readable listing, the endpoint
  *   refuses or fails the request, or the reply is not a model listing.
@@ -195,6 +198,7 @@ function usableProbeKey(raw: string): string {
 export async function discoverModels(
   request: LlmModelDiscoveryRequest,
   storedApiKey?: () => Promise<string | undefined>,
+  fetchImpl?: (input: string | URL, init?: RequestInit) => Promise<Response>,
 ): Promise<readonly LlmDiscoveredModel[]> {
   // A catalog route already has its answer, and a better one: the installed
   // entries carry context windows and output caps no listing endpoint reports.
@@ -241,7 +245,8 @@ export async function discoverModels(
   const apiKey = supplied === undefined ? undefined : usableProbeKey(supplied)
   let response: Response
   try {
-    response = await fetch(url, {
+    const transportFetch = fetchImpl ?? fetch
+    response = await transportFetch(url, {
       method: 'GET',
       headers: {
         accept: 'application/json',

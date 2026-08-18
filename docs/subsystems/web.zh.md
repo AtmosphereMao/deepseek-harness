@@ -128,6 +128,10 @@ type WebFetchBody =
 
 `WebError extends HarnessError`（[core.md](core.zh.md) 错误分类体系），带有 `code: string`（开放式，与其他 seam 的错误一致——`LlmError`、`SubagentError`），而非封闭联合类型：提供方可以在不修改 `dsh-web` 的情况下抛出自己的错误代码，消费方必须容忍未知错误代码。错误代码按所有者划分。共享的 `WebRuntime` 约定会抛出与 seam 无关的错误代码：`WEB_PROVIDER_UNAVAILABLE`、`WEB_PROVIDER_CONFIGURED_MISSING`、`WEB_PROVIDER_CONFIGURED_UNAVAILABLE`、`WEB_PROVIDER_AMBIGUOUS`、`WEB_DUPLICATE_PROVIDER`（注册时的编程错误，类似 `LlmRuntime` 的 `DUPLICATE_ADAPTER`）、`WEB_ABORTED`，以及 `WEB_PROVIDER_ERROR`（提供方自身故障经 seam 暴露时使用的兜底代码，包括 DNS、连接被拒绝、TLS 等网络或传输故障）。抓取传输层错误代码由 `dsh-web-fetch-http` 实现拥有，不同的抓取后端无需抛出它们：`WEB_INVALID_URL`、`WEB_BLOCKED_URL`、`WEB_REDIRECT_BLOCKED`、`WEB_FETCH_TOO_LARGE`、`WEB_FETCH_TIMEOUT`、`WEB_UNSUPPORTED_CONTENT_TYPE`。
 
+## HTTP 传输
+
+每个 web 提供方——以及 DeepSeek 对话适配器——都经由共享的 [`ctx.http` 传输](../../packages/http/http/README.md)访问网络，而非直接调用全局 `fetch`。该传输会应用一个可选的 HTTP(S) 代理，代理从 `http:` 设置 namespace 实时读取（由 Network 设置页写入），因此一个代理即可作用于所有对外请求；未配置代理即表示直连。消费方在每个请求时通过 `ctx.get('http')` 解析传输层，缺失时退回全局 `fetch`，因此未挂载该传输时提供方仍可工作。只接受 `http:`/`https:` 代理 URL；SOCKS 与 `llm-pi-ai` 流式请求的限制见包 README。
+
 ## 服务
 
 `WebRuntime` 注册搜索与抓取提供方，以 `WEB_DUPLICATE_PROVIDER` 拒绝重复 id，并在执行时以结构化的选择错误解析提供方。本地抓取后端仅接受 HTTP(S)、拒绝凭证、限制重定向次数、字节数、字符数和时间、对每一次同源重定向跳转重新进行安全校验，并解码正文；展示由工具负责。本地后端不会拦截私有网络目标；在能够触及敏感内部目标的环境中，禁止启用 `web_fetch`。
@@ -139,6 +143,25 @@ type WebFetchBody =
 ## Cordis API
 
 Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnpm run verify-cordis-catalog` in doc-sync; regenerate with `pnpm run gen-cordis-catalog`) — the language sides differ only in locale-specific paired document paths. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.zh.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
+
+<a id="ctxhttp--httptransport"></a>
+
+### `ctx.http` — `HttpTransport`
+
+The shared HTTP transport service. Provides HttpTransport.fetch, which applies the currently resolved proxy (when one is configured) as an undici dispatcher on every request and otherwise defers to the global `fetch`. The proxy dispatcher is rebuilt only when the resolved proxy URL changes, so steady-state requests never pay construction cost.
+
+```ts cordis-catalog
+/**
+ * Perform one outbound request through the shared transport. Identical to
+ * the global `fetch` except that a configured proxy dispatcher is applied.
+ * @param input - the request URL (or a Request).
+ * @param init - standard fetch options (method, headers, body, signal, redirect, ...).
+ * @returns the standard fetch `Response`.
+ */
+async fetch(input: string | URL, init?: RequestInit): Promise<Response>
+```
+
+Source: [`packages/http/http/src/index.ts:77`](../../packages/http/http/src/index.ts)
 
 <a id="ctxweb--webruntime"></a>
 

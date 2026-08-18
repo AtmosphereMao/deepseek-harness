@@ -20,6 +20,9 @@ import { launchEnvironmentOf, type LaunchEnvironmentSnapshot } from '@deepseek-a
 import { deepEqualJson, installSettingsSection, settingsNamespace } from '@deepseek-ai/dsh-settings'
 import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
 import { getOrCreateAnonymousUserId, type AnonymousUserId } from '@deepseek-ai/dsh-anonymous-user-id'
+// Type-only: pulls the ctx.http Context merge so the optional shared transport
+// resolves through ctx.get('http') below.
+import type {} from '@deepseek-ai/dsh-http'
 import {
   DEFAULT_CONTEXT_WINDOW,
   DEFAULT_MAX_REQUEST_IMAGE_BYTES,
@@ -279,11 +282,19 @@ export function apply(ctx: Context, config: Config): void {
 
   let userId: AnonymousUserId | undefined
   const resolveUserId = (): AnonymousUserId => userId ??= getOrCreateAnonymousUserId()
+  // Resolve the shared transport at request time: the adapter holds the closure
+  // for the whole stream, and ctx.get reads the global store, so a transport
+  // mounted later or a proxy changed mid-process still reaches the next request.
+  const transportFetch = (input: string | URL, init?: RequestInit): Promise<Response> => {
+    const http = ctx.get('http')
+    return http === undefined ? fetch(input, init) : http.fetch(input, init)
+  }
   const adapter = new DeepSeekAdapter({
     options,
     resolveApiKey,
     resolveUserId,
     resolveAttachments: () => ctx.get('attachments'),
+    fetch: transportFetch,
   })
   ctx.llm.registerConfigurableProviders([
     { provider: PROVIDER, displayName: 'DeepSeek', settingsNs: NS, settingsPath: [] },

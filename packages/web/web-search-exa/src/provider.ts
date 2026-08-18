@@ -42,6 +42,12 @@ export interface ExaSearchProviderOptions {
   numResults?: number
   /** Highlight sentences requested per result (Exa's `highlightsPerUrl`). */
   highlightsPerResult: number
+  /**
+   * Transport used for the search request; defaults to the global `fetch`. The
+   * registering plugin supplies the shared `ctx.http` transport so a configured
+   * proxy reaches the next search.
+   */
+  fetch?: (input: string | URL, init?: RequestInit) => Promise<Response>
 }
 
 /**
@@ -98,7 +104,8 @@ export class ExaSearchProvider implements WebSearchProvider {
     const numResults = request.maxResults ?? this.options.numResults
     let response: Response
     try {
-      response = await fetch(`${this.options.baseURL}/search`, {
+      const transportFetch = this.options.fetch ?? fetch
+      response = await transportFetch(`${this.options.baseURL}/search`, {
         method: 'POST',
         redirect: 'error',
         headers: {

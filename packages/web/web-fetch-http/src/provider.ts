@@ -36,7 +36,10 @@ export const LOCAL_FETCH_PROVIDER_ID = 'http'
 export class HttpFetchProvider implements WebFetchProvider {
   readonly id = LOCAL_FETCH_PROVIDER_ID
 
-  constructor(private readonly limits: HttpFetchLimits) {}
+  constructor(
+    private readonly limits: HttpFetchLimits,
+    private readonly transport: (input: string | URL, init?: RequestInit) => Promise<Response> = fetch,
+  ) {}
 
   /** No credentials to check — an anonymous public fetcher is always usable. */
   available(): boolean {
@@ -102,7 +105,7 @@ export class HttpFetchProvider implements WebFetchProvider {
 
   private async requestOnce(url: URL, signal: AbortSignal): Promise<Response> {
     try {
-      return await fetch(url, {
+      return await this.transport(url, {
         method: 'GET',
         redirect: 'manual',
         headers: { 'user-agent': this.limits.userAgent, 'accept': 'text/html,application/xhtml+xml,text/*;q=0.9,application/json;q=0.8' },

@@ -78,6 +78,14 @@
     - id: settings
       name: '@deepseek-ai/dsh-settings-file'
 
+    # The shared outbound HTTP transport: one optional proxy read live from the
+    # `http:` settings section (what the web Network page writes) and applied to
+    # every request the LLM adapter, web fetch, and web search providers make.
+    # Consumers resolve it lazily per request via ctx.get('http') and fall back
+    # to the global fetch, so it is safe to mount beside them in any order.
+    - id: http
+      name: '@deepseek-ai/dsh-http'
+
     # Credential sources: inherited environment over the managed
     # `$DSH_HOME/.credentials.yaml`, with project and user `.env` fallbacks.
     # Adapters resolve references per request; the Models page writes only the

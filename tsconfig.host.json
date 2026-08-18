@@ -152,6 +152,7 @@
     { "path": "./packages/session-query/session-query-sqlite" },
     { "path": "./packages/settings/settings" },
     { "path": "./packages/settings/settings-file" },
+    { "path": "./packages/http/http" },
     { "path": "./packages/credentials/credentials" },
     { "path": "./packages/credentials/credentials-local" },
     { "path": "./packages/credentials/authorization" },

@@ -12,6 +12,8 @@ import type { Context } from '@deepseek-ai/cordis'
 import { launchEnvironmentOf } from '@deepseek-ai/dsh-launch-environment'
 import z from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/dsh-web'
+// Type-only: pulls the ctx.http Context merge for the optional shared transport.
+import type {} from '@deepseek-ai/dsh-http'
 import {
   ExaSearchProvider,
   EXA_DEFAULT_BASE_URL,
@@ -66,5 +68,9 @@ export function apply(ctx: Context, config: Config): void {
     searchType: config.searchType ?? EXA_DEFAULT_SEARCH_TYPE,
     highlightsPerResult: config.highlightsPerResult ?? EXA_DEFAULT_HIGHLIGHTS_PER_RESULT,
     ...config.numResults !== undefined ? { numResults: config.numResults } : {},
+    fetch: (input, init) => {
+      const http = ctx.get('http')
+      return http === undefined ? fetch(input, init) : http.fetch(input, init)
+    },
   }))
 }
