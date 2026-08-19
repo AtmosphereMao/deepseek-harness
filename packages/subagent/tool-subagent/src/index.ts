@@ -13,7 +13,7 @@ import z from '@deepseek-ai/schemastery'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { AgentOptions } from '@deepseek-ai/dsh-agent'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
-import type { JsonValue } from '@deepseek-ai/dsh-session'
+import type { JsonValue, SessionEvent } from '@deepseek-ai/dsh-session'
 import { assertSubagentMaxDepth, settleRun } from '@deepseek-ai/dsh-subagent'
 import type { SubagentProvider, SubagentResult, SubagentRun } from '@deepseek-ai/dsh-subagent'
 import type { JobOutcome } from '@deepseek-ai/dsh-jobs'
@@ -106,6 +106,33 @@ function outputValueText(values: JsonValue[]): string {
       && value.type === 'text' && typeof value.text === 'string')
     .map(value => value.text)
     .join('')
+}
+
+/** Find one image block by its opaque attachment id, including nested tool results. */
+function findImageBlock(content: unknown, attachmentId: string): Extract<ContentBlock, { type: 'image' }> | undefined {
+  if (!Array.isArray(content)) return undefined
+  for (const value of content) {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) continue
+    const block = value as { type?: unknown; attachment?: unknown; content?: unknown }
+    if (block.type === 'image' && typeof block.attachment === 'object' && block.attachment !== null) {
+      if (String((block.attachment as { attachmentId: unknown }).attachmentId) === attachmentId) {
+        return block as Extract<ContentBlock, { type: 'image' }>
+      }
+    } else if (block.type === 'tool-result') {
+      const nested = findImageBlock(block.content, attachmentId)
+      if (nested !== undefined) return nested
+    }
+  }
+  return undefined
+}
+
+/** Resolve one opaque image attachment id to its image block from the parent's session log. */
+function resolveImageBlock(events: readonly SessionEvent[], attachmentId: string): Extract<ContentBlock, { type: 'image' }> | undefined {
+  for (const event of events) {
+    const found = findImageBlock((event.data as { content?: unknown }).content, attachmentId)
+    if (found !== undefined) return found
+  }
+  return undefined
 }
 
 /** Settle pending startup without rejecting the task producer contract. */
@@ -317,6 +344,13 @@ export function apply(ctx: Context, config: Config): void {
           required: true,
           description: wording.promptDescription,
         },
+        image_attachment_ids: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Optional opaque attachment id(s) of images to include in the child\'s prompt. '
+            + 'Pass the `attachmentId` shown in an `[image attached: ...]` placeholder in this conversation. '
+            + 'Omit when the task does not involve an image.',
+        },
         ...backgroundEnabled ? {
           run_in_background: {
             type: 'boolean' as const,
@@ -376,9 +410,21 @@ export function apply(ctx: Context, config: Config): void {
         }
 
         const maxDepth = typeof config.maxDepth === 'number' ? config.maxDepth : undefined
+        const promptBlocks: ContentBlock[] = []
+        for (const attachmentId of args.image_attachment_ids ?? []) {
+          const trimmed = attachmentId.trim()
+          if (trimmed.length === 0) continue
+          const block = resolveImageBlock(parent.session.events, trimmed)
+          if (block === undefined) {
+            throw new Error(`subagent tool could not find image attachment "${trimmed}" in the conversation; it may have been uploaded before the current turn`)
+          }
+          promptBlocks.push(block)
+        }
+        promptBlocks.push({ type: 'text', text: args.prompt })
+
         const request = {
           label: args.description,
-          prompt: [{ type: 'text', text: args.prompt }] as ContentBlock[],
+          prompt: promptBlocks,
           parent,
           ...config.agentOptions !== undefined ? { agentOptions: config.agentOptions } : {},
           ...config.persona !== undefined ? { persona: config.persona } : {},

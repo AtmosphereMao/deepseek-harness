@@ -105,7 +105,7 @@ describe('dsh-tool-subagent', () => {
     const schema = ctx.tools.schemas().find(s => s.name === 'subagent')
     expect(schema).toBeDefined()
     const props = (schema!.parameters as { properties?: Record<string, unknown> }).properties ?? {}
-    expect(Object.keys(props).sort()).toEqual(['description', 'prompt', 'run_in_background'])
+    expect(Object.keys(props).sort()).toEqual(['description', 'image_attachment_ids', 'prompt', 'run_in_background'])
     expect(schema!.description).toContain('job_output')
   })
 
@@ -113,7 +113,7 @@ describe('dsh-tool-subagent', () => {
     const ctx = await setup({ provider: 'mock', enableRunInBackground: false })
     const schema = ctx.tools.schemas().find(s => s.name === 'subagent')
     const props = (schema!.parameters as { properties?: Record<string, unknown> }).properties ?? {}
-    expect(Object.keys(props).sort()).toEqual(['description', 'prompt'])
+    expect(Object.keys(props).sort()).toEqual(['description', 'image_attachment_ids', 'prompt'])
     expect(schema!.description).not.toContain('job_output')
   })
 
@@ -258,6 +258,100 @@ describe('dsh-tool-subagent', () => {
 
     await callSubagent(ctx, { description: 'd', prompt: 'p' })
     expect(seen?.agentOptions).toEqual({ model: 'child-model' })
+  })
+
+  it('injects referenced image blocks from the conversation into the child prompt', async () => {
+    const image = {
+      type: 'image',
+      attachment: { attachmentId: 'att-x', mediaType: 'image/png', bytes: 1, width: 1, height: 1 },
+    }
+    let captured: SubagentStartRequest | undefined
+    const ctx = await setup({ provider: 'mock' }, {
+      onStart: (request) => { captured = request },
+    })
+    const parent = {
+      id: SessionId('parent-img'),
+      session: {
+        events: [{
+          type: 'user/message', seq: 0, time: 0,
+          data: { id: 'm1', role: 'user', source: { kind: 'user' }, content: [image] },
+          surfaceOp: 'append',
+        }],
+      },
+    } as unknown as Agent
+
+    const result = await callSubagent(ctx, {
+      description: 'd', prompt: 'describe it', image_attachment_ids: ['att-x'],
+    }, { agent: parent })
+    expect(result.isError).toBe(false)
+    expect(captured?.prompt).toEqual([
+      { type: 'image', attachment: { attachmentId: 'att-x', mediaType: 'image/png', bytes: 1, width: 1, height: 1 } },
+      { type: 'text', text: 'describe it' },
+    ])
+  })
+
+  it('fails when a referenced image attachment id is not in the conversation', async () => {
+    const ctx = await setup({ provider: 'mock' })
+    const parent = {
+      id: SessionId('parent-img'),
+      session: {
+        events: [
+          // An event with no content carrier.
+          { type: 'turn/start', seq: 0, time: 0, data: { turn: 1 } },
+          // A message mixing a non-block, a non-matching image, and a tool result without a match.
+          {
+            type: 'user/message', seq: 1, time: 1,
+            data: {
+              id: 'm1', role: 'user', source: { kind: 'user' },
+              content: [
+                'not a block',
+                { type: 'image', attachment: { attachmentId: 'att-other', mediaType: 'image/png', bytes: 1, width: 1, height: 1 } },
+                { type: 'tool-result', toolCallId: 'call-1', content: [{ type: 'text', text: 'plain' }] },
+              ],
+            },
+          },
+        ],
+      },
+    } as unknown as Agent
+
+    const result = await callSubagent(ctx, {
+      description: 'd', prompt: 'p', image_attachment_ids: ['att-missing'],
+    }, { agent: parent })
+    expect(result.isError).toBe(true)
+    expect(text(result)).toContain('could not find image attachment "att-missing"')
+  })
+
+  it('resolves images nested in tool results and skips blank attachment ids', async () => {
+    const nestedImage = {
+      type: 'image',
+      attachment: { attachmentId: 'att-nested', mediaType: 'image/webp', bytes: 2, width: 1, height: 1 },
+    }
+    let captured: SubagentStartRequest | undefined
+    const ctx = await setup({ provider: 'mock' }, {
+      onStart: (request) => { captured = request },
+    })
+    const parent = {
+      id: SessionId('parent-img'),
+      session: {
+        events: [{
+          type: 'user/message', seq: 0, time: 0,
+          data: {
+            id: 'm1', role: 'user', source: { kind: 'user' },
+            content: [{ type: 'tool-result', toolCallId: 'call-1', content: [nestedImage] }],
+          },
+          surfaceOp: 'append',
+        }],
+      },
+    } as unknown as Agent
+
+    const result = await callSubagent(ctx, {
+      description: 'd', prompt: 'look', image_attachment_ids: ['  ', 'att-nested'],
+    }, { agent: parent })
+    expect(result.isError).toBe(false)
+    expect(captured?.prompt).toEqual([
+      { type: 'image', attachment: { attachmentId: 'att-nested', mediaType: 'image/webp', bytes: 2, width: 1, height: 1 } },
+      { type: 'text', text: 'look' },
+    ])
   })
 
   it('defaults toolName and omits agentOptions when apply() is called directly (schema bypass)', async () => {

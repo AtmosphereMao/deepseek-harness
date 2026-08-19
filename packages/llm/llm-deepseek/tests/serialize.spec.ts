@@ -133,17 +133,79 @@ describe('serializeMessages', () => {
     expect(wire).toEqual([{ role: 'user', content: 'see chart' }])
   })
 
-  it('rejects image blocks instead of silently flattening them away', () => {
-    expect(() => serializeMessages([createUserMessage({
+  it('replaces an image block with a placeholder naming the attachment', () => {
+    const wire = serializeMessages([createUserMessage({
       content: [{
         type: 'image',
         attachment: {
           attachmentId: AttachmentId(`sha256:${'a'.repeat(64)}`),
-          mediaType: 'image/png', bytes: 68, width: 1, height: 1,
+          mediaType: 'image/png', bytes: 68, width: 1, height: 1, name: 'photo.png',
         },
       }],
       source: { kind: 'plugin', plugin: 'test' },
-    })])).toThrow(expect.objectContaining({ code: 'UNSUPPORTED_CONTENT' }))
+    })])
+    expect(wire).toEqual([{
+      role: 'user',
+      content: `[image attached: photo.png (attachmentId: sha256:${'a'.repeat(64)})]`,
+    }])
+  })
+
+  it('falls back to the media type when an image has no display name', () => {
+    const wire = serializeMessages([createUserMessage({
+      content: [{
+        type: 'image',
+        attachment: {
+          attachmentId: AttachmentId(`sha256:${'a'.repeat(64)}`),
+          mediaType: 'image/jpeg', bytes: 68, width: 1, height: 1,
+        },
+      }],
+      source: { kind: 'plugin', plugin: 'test' },
+    })])
+    expect(wire).toEqual([{
+      role: 'user',
+      content: `[image attached: image/jpeg (attachmentId: sha256:${'a'.repeat(64)})]`,
+    }])
+  })
+
+  it('joins text and image placeholders in one user message', () => {
+    const wire = serializeMessages([createUserMessage({
+      content: [
+        { type: 'text', text: 'look at this' },
+        {
+          type: 'image',
+          attachment: {
+            attachmentId: AttachmentId(`sha256:${'a'.repeat(64)}`),
+            mediaType: 'image/png', bytes: 68, width: 1, height: 1,
+          },
+        },
+      ],
+      source: { kind: 'plugin', plugin: 'test' },
+    })])
+    expect(wire).toEqual([{
+      role: 'user',
+      content: `look at this [image attached: image/png (attachmentId: sha256:${'a'.repeat(64)})]`,
+    }])
+  })
+
+  it('replaces images nested in tool results', () => {
+    const wire = serializeMessages([createUserMessage({
+      content: [{
+        type: 'tool-result',
+        toolCallId: CallId('call-1'),
+        content: [{
+          type: 'image',
+          attachment: {
+            attachmentId: AttachmentId(`sha256:${'a'.repeat(64)}`),
+            mediaType: 'image/webp', bytes: 68, width: 1, height: 1,
+          },
+        }],
+      }],
+      source: { kind: 'plugin', plugin: 'test' },
+    })])
+    expect(wire).toEqual([
+      { role: 'user', content: `[image attached: image/webp (attachmentId: sha256:${'a'.repeat(64)})]` },
+      { role: 'tool', tool_call_id: 'call-1', content: '(no output)' },
+    ])
   })
 
   it('emits an empty user message rather than dropping block-less messages', () => {
