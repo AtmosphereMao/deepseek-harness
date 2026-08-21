@@ -20,7 +20,7 @@ The SDK client returns an owned child activity rather than a prompt result. The 
 
 ## Capabilities and context
 
-The provider advertises no start-time capabilities (`outputSchema`/`depthLimit`/`toolFilter`/`persona` all false) and `inheritsParentContext: false`: the child is a fresh runtime in another process, and the only parent-derived input is the workspace cwd. `dsh-tool-subagent` deployments over this provider set `maxDepth: 'provider-managed'` — the child harness owns its own recursion budget.
+The provider advertises no start-time capabilities (`outputSchema`/`depthLimit`/`toolFilter`/`persona`/`imagePrompt` all false) and `inheritsParentContext: false`: the child is a fresh runtime in another process, and the only parent-derived input is the workspace cwd. An image-bearing prompt is refused at `start` rather than delivered without its picture. `dsh-tool-subagent` deployments over this provider set `maxDepth: 'provider-managed'` — the child harness owns its own recursion budget.
 
 ## Configuration
 

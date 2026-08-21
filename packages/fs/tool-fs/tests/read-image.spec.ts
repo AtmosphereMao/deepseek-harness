@@ -274,6 +274,9 @@ describe('strict image-modality gate', () => {
     const result = await readImage(ctx, { file_path: 'red.png' }, agentOn(model))
     expect(result.isError).toBe(true)
     expect(text(result)).toContain('does not declare image input')
+    // The refusal names delegation first: a text-only route can still see the
+    // image through an image-capable child, so "switch models" is the fallback.
+    expect(text(result)).toContain('delegate to a subagent')
   })
 
   it('refuses when the route cannot be resolved (no agent, or no header and no options)', async () => {

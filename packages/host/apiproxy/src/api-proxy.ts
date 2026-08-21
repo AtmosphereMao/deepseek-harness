@@ -7,8 +7,8 @@ import { randomUUID } from 'node:crypto'
 import { mkdir, stat } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
-import { installModelSelection } from '@deepseek-ai/dsh-agent'
-import type { Agent, ModelSelection, ModelSelectionRef, AgentOptions, AgentStatus } from '@deepseek-ai/dsh-agent'
+import { installModelSelection, installSubagentModelSelection } from '@deepseek-ai/dsh-agent'
+import type { Agent, ModelSelection, ModelSelectionRef, SubagentModelSelectionRef, AgentOptions, AgentStatus } from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-agent-presets/types'
 import { AttachmentError } from '@deepseek-ai/dsh-attachment'
 import type { ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
@@ -1079,6 +1079,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
   }
   type WebModelSelectionRef = ModelSelectionRef & { current: ModelSelection }
   const selections = new WeakMap<Agent, WebModelSelectionRef>()
+  const subagentSelections = new WeakMap<Agent, SubagentModelSelectionRef>()
   /**
    * Serializes `agentPreset.select` per session. Two concurrent selects both
    * pass the blank check, and the second `unmountPresetFor` then finds nothing
@@ -1144,11 +1145,27 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
     return selection
   }
 
+  /**
+   * Install or return the session-local subagent-model selection. Unlike the
+   * main selection, there is no log or default tier: `current` is `undefined`
+   * until this process records a pick, and `undefined` means the subagent tool
+   * inherits its composition `agentOptions` unchanged.
+   */
+  function subagentSelectionFor(agent: Agent): SubagentModelSelectionRef {
+    const installed = subagentSelections.get(agent)
+    if (installed !== undefined) return installed
+    const selection: SubagentModelSelectionRef = { current: undefined }
+    installSubagentModelSelection(agent.ctx, selection)
+    subagentSelections.set(agent, selection)
+    return selection
+  }
+
   /** Pre-publication setup used by both fresh and resumed Web agents. */
   function installSelection(agentCtx: Context): void {
     const agent = agentCtx.agent
     if (agent === undefined) throw new Error('api-proxy: agent setup has no scoped agent')
     selectionFor(agent)
+    subagentSelectionFor(agent)
   }
 
   /**
@@ -2209,9 +2226,10 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         const found = await agentFor(sessionId)
         if ('error' in found) return err(request, found.error)
         const current = selectionFor(found.agent).current
+        const subagent = subagentSelectionFor(found.agent).current ?? null
         const { groups, failures } = await buildModelCatalog(ctx)
         const routable = routeServed(current.provider)
-        return ok(request, { current: { ...current }, routable, groups, failures })
+        return ok(request, { current: { ...current }, subagent, routable, groups, failures })
       },
 
       async selectModel(request) {
@@ -2251,6 +2269,36 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             })
           }
         })
+      },
+
+      async selectSubagentModel(request) {
+        const { sessionId, provider, model, reasoningEffort } = request.payload
+        const found = await agentFor(sessionId)
+        if ('error' in found) return err(request, found.error)
+        try {
+          const resolved = await ctx.llm.resolveCallConfig({
+            provider,
+            model,
+            ...reasoningEffort === undefined
+              ? {}
+              : { reasoningEffort: ReasoningEffortId(reasoningEffort) },
+          })
+          const selected: ModelSelection = {
+            provider: resolved.provider,
+            model: resolved.model,
+            ...resolved.reasoningEffort === undefined
+              ? {}
+              : { reasoningEffort: resolved.reasoningEffort },
+          }
+          subagentSelectionFor(found.agent).current = selected
+          return ok(request, { selected: { ...selected } })
+        } catch (error: unknown) {
+          return err(request, {
+            code: 'model-unavailable',
+            message: error instanceof Error ? error.message : String(error),
+            details: { provider, model },
+          })
+        }
       },
 
       async rename(request) {

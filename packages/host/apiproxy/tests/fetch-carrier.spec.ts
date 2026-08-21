@@ -63,6 +63,7 @@ function fakeApi(overrides: Partial<{ muxFrames: MuxFrame[]; hostFrames: HostFra
             ok: true,
             value: {
               current: { provider: 'deepseek-official', model: 'deepseek-v4-flash' },
+              subagent: null,
               routable: true,
               groups: [],
               failures: [],
@@ -71,6 +72,23 @@ function fakeApi(overrides: Partial<{ muxFrames: MuxFrame[]; hostFrames: HostFra
         }
       },
       async selectModel(request) {
+        return {
+          rpcId: request.rpcId,
+          result: {
+            ok: true,
+            value: {
+              selected: {
+                provider: request.payload.provider,
+                model: request.payload.model,
+                ...request.payload.reasoningEffort === undefined
+                  ? {}
+                  : { reasoningEffort: request.payload.reasoningEffort },
+              },
+            },
+          },
+        }
+      },
+      async selectSubagentModel(request) {
         return {
           rpcId: request.rpcId,
           result: {
@@ -350,6 +368,22 @@ describe('unary round trip (handler ⇄ client, no network)', () => {
         selected: {
           provider: 'deepseek-official',
           model: 'deepseek-v4-flash',
+          reasoningEffort: 'max',
+        },
+      },
+    })
+    const subagentSelected = await c.sessions.selectSubagentModel({
+      sessionId: 's' as never,
+      provider: 'deepseek-official',
+      model: 'deepseek-v4-pro',
+      reasoningEffort: 'max',
+    })
+    expect(subagentSelected.result).toMatchObject({
+      ok: true,
+      value: {
+        selected: {
+          provider: 'deepseek-official',
+          model: 'deepseek-v4-pro',
           reasoningEffort: 'max',
         },
       },

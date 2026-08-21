@@ -26,6 +26,20 @@ function toolResultText(blocks: readonly ContentBlock[]): string {
     : block.type === 'tool-result' ? toolResultText(block.content) : '').join('')
 }
 
+/** Placeholder text for image blocks a text-only route cannot carry, naming the attachment so a vision-capable subagent can describe it. */
+function imageNotes(blocks: readonly ContentBlock[]): string[] {
+  const notes: string[] = []
+  for (const block of blocks) {
+    if (block.type === 'image') {
+      const ref = block.attachment
+      notes.push(`[image attached: ${ref.name ?? ref.mediaType} (attachmentId: ${String(ref.attachmentId)})]`)
+    } else if (block.type === 'tool-result') {
+      notes.push(...imageNotes(block.content))
+    }
+  }
+  return notes
+}
+
 async function userContent(
   blocks: readonly ContentBlock[],
   attachments: AttachmentStore,
@@ -88,9 +102,6 @@ function textOnlyContext(options: GenerateOptions, onReplayDegrade?: (reason: st
   const toolNames = new Map<CallId, string>()
   const messages: PiMessage[] = []
   for (const message of options.messages) {
-    if (contentHasImage(message.content)) {
-      throw new LlmError('pi-ai image conversion requires the durable attachment service', 'UNSUPPORTED_CONTENT')
-    }
     if (message.role === 'system') {
       messages.push({ role: 'user', content: flattenText(message), timestamp: 0 })
       continue
@@ -101,7 +112,7 @@ function textOnlyContext(options: GenerateOptions, onReplayDegrade?: (reason: st
       messages.push(assistant)
       continue
     }
-    const text = flattenText(message)
+    const text = [flattenText(message), ...imageNotes(message.content.filter(block => block.type !== 'tool-result'))].filter(part => part.length > 0).join(' ')
     const results = message.content.filter(block => block.type === 'tool-result')
     if (text.length > 0 || results.length === 0) messages.push({ role: 'user', content: text, timestamp: 0 })
     for (const result of results) {
@@ -111,7 +122,7 @@ function textOnlyContext(options: GenerateOptions, onReplayDegrade?: (reason: st
         toolName: toolNames.get(result.toolCallId) ?? 'unknown',
         content: [{
           type: 'text',
-          text: toolResultText(result.content) || '(no output)',
+          text: [toolResultText(result.content), ...imageNotes(result.content)].filter(part => part.length > 0).join(' ') || '(no output)',
         }],
         isError: result.isError ?? false,
         timestamp: 0,

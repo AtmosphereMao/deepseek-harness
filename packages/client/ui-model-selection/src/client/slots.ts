@@ -22,4 +22,10 @@ export interface ModelSelectInjected {
    * @returns whether the host accepted the selection.
    */
   select: (selection: ModelSelection) => Promise<boolean>
+  /**
+   * Select the model subagents spawned from this session use.
+   * @param selection - model selection and optional adapter-owned effort.
+   * @returns whether the host accepted the selection.
+   */
+  selectSubagent: (selection: ModelSelection) => Promise<boolean>
 }

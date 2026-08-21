@@ -146,8 +146,8 @@ describe('toPiContext', () => {
     }])
   })
 
-  it('rejects structured image history when no durable resolver is supplied', () => {
-    expect(() => toPiContext({
+  it('names a structured image as placeholder text when no durable resolver is supplied', () => {
+    const context = toPiContext({
       provider: 'openai', model: 'gpt-4.1',
       messages: [createUserMessage({
         content: [{
@@ -159,7 +159,12 @@ describe('toPiContext', () => {
         }],
         source: { kind: 'plugin', plugin: 'test' },
       })],
-    })).toThrow(expect.objectContaining({ code: 'UNSUPPORTED_CONTENT' }))
+    })
+    expect(context.messages).toEqual([{
+      role: 'user',
+      content: `[image attached: image/png (attachmentId: sha256:${'b'.repeat(64)})]`,
+      timestamp: 0,
+    }])
   })
 
   it('maps assistant text/reasoning/tool-call blocks', () => {

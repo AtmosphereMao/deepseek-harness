@@ -4,8 +4,11 @@ import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import {
   agentEvents,
   installModelSelection,
+  installSubagentModelSelection,
+  subagentModelOf,
   type Agent,
   type ModelSelectionRef,
+  type SubagentModelSelectionRef,
 } from '../src/index.ts'
 import { ReasoningEffortId, type LlmCallConfig } from '@deepseek-ai/dsh-llm'
 
@@ -57,5 +60,18 @@ describe('installModelSelection()', () => {
       'agent/request', { turn: 2, step: 0, signal }, () => Promise.resolve(seed),
     )).resolves.toBe(seed)
     await ctx.fiber.dispose()
+  })
+})
+
+describe('installSubagentModelSelection()', () => {
+  it('provides a per-scope selection readable through subagentModelOf, disposed with the provider', () => {
+    const ctx = new Context()
+    const selection: SubagentModelSelectionRef = { current: undefined }
+    const dispose = installSubagentModelSelection(ctx, selection)
+    expect(subagentModelOf(ctx)).toBeUndefined()
+    selection.current = { provider: 'polaris', model: 'claude-haiku-4-5' }
+    expect(subagentModelOf(ctx)).toEqual({ provider: 'polaris', model: 'claude-haiku-4-5' })
+    dispose()
+    expect(subagentModelOf(ctx)).toBeUndefined()
   })
 })

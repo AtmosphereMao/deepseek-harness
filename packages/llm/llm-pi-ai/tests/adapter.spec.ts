@@ -765,20 +765,12 @@ describe('provider profile lifecycle', () => {
     expect(new LlmError('x', 'X')).toBeInstanceOf(Error)
   })
 
-  it('rejects unsupported or unresolved image input before provider I/O', async () => {
+  it('rejects unresolved vision image input without the attachment service before provider I/O', async () => {
     const adapter = adapterOf({ openai: {}, deepseek: {} })
     const drain = async (options: Parameters<PiAiAdapter['stream']>[0]): Promise<void> => {
       for await (const _chunk of adapter.stream(options)) { /* drain */ }
     }
 
-    await expect(drain({
-      provider: 'deepseek',
-      model: 'deepseek-v4-flash',
-      messages: [createUserMessage({
-        content: [{ type: 'image', attachment: IMAGE_REF }],
-        source: { kind: 'plugin', plugin: 'test' },
-      })],
-    })).rejects.toMatchObject({ code: 'UNSUPPORTED_CONTENT' })
     await expect(drain({
       provider: 'openai',
       model: 'gpt-4.1',
@@ -803,6 +795,25 @@ describe('provider profile lifecycle', () => {
         source: { kind: 'plugin', plugin: 'test' },
       })],
     })).rejects.toMatchObject({ code: 'UNSUPPORTED_CONTENT' })
+  })
+
+  it('keeps a text-only model aware of an image through placeholder text', async () => {
+    const server = await mockServer([{ events: textEvents }])
+    const ctx = await harness(server.url)
+    const result = await assemble(ctx, {
+      model: 'deepseek-v4-flash',
+      messages: [createUserMessage({
+        content: [{ type: 'image', attachment: IMAGE_REF }],
+        source: { kind: 'plugin', plugin: 'test' },
+      })],
+    })
+    expect(result.message.content).toEqual([{ type: 'text', text: 'hello' }])
+    expect(server.requests[0]).toMatchObject({
+      messages: [{
+        role: 'user',
+        content: `[image attached: image/png (attachmentId: ${String(IMAGE_REF.attachmentId)})]`,
+      }],
+    })
   })
 
   it('validates profiles at the shared resolver boundary', () => {

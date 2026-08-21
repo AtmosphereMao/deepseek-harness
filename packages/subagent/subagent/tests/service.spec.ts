@@ -24,8 +24,8 @@ function fakeParent(id = 'parent-1'): Agent {
   return { id: SessionId(id) } as unknown as Agent
 }
 
-const ALL_CAPS: SubagentCapabilities = { outputSchema: true, depthLimit: true, toolFilter: true, persona: true }
-const NO_CAPS: SubagentCapabilities = { outputSchema: false, depthLimit: false, toolFilter: false, persona: false }
+const ALL_CAPS: SubagentCapabilities = { outputSchema: true, depthLimit: true, toolFilter: true, persona: true, imagePrompt: true }
+const NO_CAPS: SubagentCapabilities = { outputSchema: false, depthLimit: false, toolFilter: false, persona: false, imagePrompt: false }
 
 function baseRequest(overrides: Partial<SubagentStartRequest> = {}): SubagentStartRequest {
   return {
@@ -165,6 +165,16 @@ describe('SubagentRuntime', () => {
     ['depthLimit', { maxDepth: 1 }],
     ['toolFilter', { toolFilter: { deny: ['bash'] } }],
     ['persona', { persona: 'reviewer' }],
+    // Keyed off prompt content rather than a named option: a text-only wire must
+    // refuse the image instead of dropping it on the way to the child.
+    ['imagePrompt', {
+      prompt: [{
+        type: 'image',
+        // The branded id is opaque here; this test asserts the capability gate,
+        // not attachment resolution.
+        attachment: { attachmentId: 'att-1', mediaType: 'image/png', bytes: 1, width: 1, height: 1 },
+      }] as unknown as SubagentStartRequest['prompt'],
+    }],
   ] as const)('rejects unsupported %s before provider startup', async (_capability, override) => {
     const { subagents } = await service()
     const provider = new StubProvider('weak', NO_CAPS)

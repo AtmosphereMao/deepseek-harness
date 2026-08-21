@@ -43,7 +43,7 @@ describe('pi-ai request context conversion', () => {
     expect(toPiContext({ ...base, tools: [] })).toEqual({ messages: [] })
   })
 
-  it('converts complete text-only history and rejects nested images without storage', () => {
+  it('converts complete text-only history and names images as placeholder text without storage', () => {
     const callId = CallId('call-1')
     expect(toPiContext(request([
       history('system', [{ type: 'text', text: 'history system' }]),
@@ -73,11 +73,30 @@ describe('pi-ai request context conversion', () => {
       ],
     })
 
-    expect(() => toPiContext(request([user([{
-      type: 'tool-result',
-      toolCallId: callId,
-      content: [{ type: 'image', attachment: ref }],
-    }])]))).toThrow(/durable attachment service/)
+    // A top-level image becomes a placeholder in the user text.
+    expect(toPiContext(request([
+      user([{ type: 'text', text: 'caption' }, { type: 'image', attachment: ref }]),
+    ]))).toMatchObject({
+      messages: [{
+        role: 'user',
+        content: `caption [image attached: image/png (attachmentId: ${String(ref.attachmentId)})]`,
+      }],
+    })
+
+    // A nested tool-result image becomes a placeholder in the tool-result text.
+    expect(toPiContext(request([
+      user([{
+        type: 'tool-result',
+        toolCallId: callId,
+        content: [{ type: 'image', attachment: ref }],
+      }]),
+    ]))).toMatchObject({
+      messages: [{
+        role: 'toolResult',
+        toolCallId: 'call-1',
+        content: [{ type: 'text', text: `[image attached: image/png (attachmentId: ${String(ref.attachmentId)})]` }],
+      }],
+    })
   })
 
   it('resolves user and tool-result images while preserving explicit fallbacks', async () => {

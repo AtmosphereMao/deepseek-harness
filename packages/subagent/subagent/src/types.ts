@@ -88,6 +88,14 @@ export interface SubagentCapabilities {
   readonly depthLimit: boolean
   readonly toolFilter: boolean
   readonly persona: boolean
+  /**
+   * The provider delivers non-text prompt blocks (today: `image`) to the child
+   * unchanged. A provider whose wire carries text only declares `false`, so an
+   * image-bearing prompt is rejected at `start` instead of reaching a child that
+   * would never see the picture. Unlike the sibling flags this one is keyed off
+   * {@link SubagentStartRequest.prompt} content rather than a named option.
+   */
+  readonly imagePrompt: boolean
 }
 
 /**

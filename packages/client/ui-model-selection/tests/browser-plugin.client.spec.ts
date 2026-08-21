@@ -57,12 +57,15 @@ const GROUPS = [{
 async function bench() {
   const ctx = new Context()
   let current: ModelSelection = { provider: 'deepseek-official', model: 'deepseek-v4-flash' }
-  const calls = { models: 0, select: 0 }
+  let subagent: ModelSelection | null = null
+  const calls = { models: 0, select: 0, selectSubagent: 0 }
+  let modelError: Error | null = null
   ctx.provide('connection', { api: { sessions: {
     models: () => {
       calls.models += 1
+      if (modelError !== null) return Promise.reject(modelError)
       return Promise.resolve({
-        result: { ok: true as const, value: { current, routable, groups: GROUPS, failures: [] } },
+        result: { ok: true as const, value: { current, subagent, routable, groups: GROUPS, failures: [] } },
       })
     },
     selectModel: (payload: { provider: string; model: string; reasoningEffort?: string }) => {
@@ -75,6 +78,17 @@ async function bench() {
           : { reasoningEffort: payload.reasoningEffort },
       }
       return Promise.resolve({ result: { ok: true as const, value: { selected: current } } })
+    },
+    selectSubagentModel: (payload: { provider: string; model: string; reasoningEffort?: string }) => {
+      calls.selectSubagent += 1
+      subagent = {
+        provider: payload.provider,
+        model: payload.model,
+        ...payload.reasoningEffort === undefined
+          ? {}
+          : { reasoningEffort: payload.reasoningEffort },
+      }
+      return Promise.resolve({ result: { ok: true as const, value: { selected: subagent } } })
     },
   } } })
   // Whether the Host reports an adapter for the current route; the composer
@@ -130,6 +144,7 @@ async function bench() {
     setHostCurrent: (selection: ModelSelection) => { current = selection },
     address: (id: SessionId) => { addressed.add(id) },
     setRoutable: (next: boolean) => { routable = next },
+    setModelError: (next: Error | null) => { modelError = next },
     blockOf: (key: string) => blocks.get(sid(key)),
   }
 }
@@ -178,6 +193,25 @@ describe('ui-model-selection dual entry', () => {
     // The POPUP's next options pass reflects it without a seat-side reload.
     const options = await b.contribution().ui.options(projection('s1'), new AbortController().signal)
     expect(options.find((o: SelectOption) => o.label === 'DeepSeek-V4-Pro')).toMatchObject({ active: true })
+  })
+
+  it('a seat subagent selection writes the shared subagent echo and leaves current untouched', async () => {
+    const b = await bench()
+    b.mint('s1')
+    const seatFace = b.seat().inject!(sid('s1'))
+    await b.ctx.modelDirectories.directoryFor(sid('s1')).load()
+    expect(await seatFace.selectSubagent({
+      provider: 'deepseek-official',
+      model: 'deepseek-v4-pro',
+    })).toBe(true)
+    const snapshot = seatFace.directory.getSnapshot()
+    expect(snapshot.subagent).toEqual({
+      provider: 'deepseek-official',
+      model: 'deepseek-v4-pro',
+    })
+    expect(snapshot.current).toEqual({ provider: 'deepseek-official', model: 'deepseek-v4-flash' })
+    expect(b.calls.selectSubagent).toBe(1)
+    expect(b.calls.select).toBe(0)
   })
 
   it('a popup selection lands on the seat store — the reverse direction of the same state', async () => {
@@ -295,6 +329,19 @@ describe('ui-model-selection dual entry', () => {
     expect(() => b.seat().inject!(sid('ghost'))).toThrow(/resolved no scope/)
   })
 
+  it('surfaces a rejected models load as a directory error instead of spinning in loading', async () => {
+    const b = await bench()
+    b.mint('s1')
+    const directory = b.ctx.modelDirectories.directoryFor(sid('s1'))
+    b.setModelError(new Error('boom'))
+    await expect(directory.load()).rejects.toThrow('boom')
+    expect(directory.store.getSnapshot()).toMatchObject({
+      status: 'error',
+      error: 'boom',
+      current: null,
+    })
+  })
+
   it('withholds both model entries from addressed subagent sessions without Agent-bound RPCs', async () => {
     const b = await bench()
     b.mint('child')
@@ -316,8 +363,12 @@ describe('ui-model-selection dual entry', () => {
       provider: 'deepseek',
       model: 'deepseek-v4-pro',
     })).rejects.toThrow(/unavailable for addressed subagent/)
+    await expect(b.ctx.modelDirectories.directoryFor(sid('child')).selectSubagent({
+      provider: 'deepseek',
+      model: 'deepseek-v4-pro',
+    })).rejects.toThrow(/unavailable for addressed subagent/)
     b.ctx.emit('connection/reset')
     await Promise.resolve()
-    expect(b.calls).toEqual({ models: 0, select: 0 })
+    expect(b.calls).toEqual({ models: 0, select: 0, selectSubagent: 0 })
   })
 })

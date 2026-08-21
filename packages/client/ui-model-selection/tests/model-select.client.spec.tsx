@@ -32,6 +32,7 @@ const reasoning = {
 function state(overrides: Partial<ModelDirectoryState> = {}): ModelDirectoryState {
   return {
     current: { provider: 'deepseek-official', model: 'deepseek-v4-flash' },
+    subagent: null,
     routable: true,
     groups: [{
       id: 'deepseek-official',
@@ -60,6 +61,7 @@ describe('ModelSelect reasoning effort', () => {
       directory={directory}
       load={vi.fn()}
       select={select}
+      selectSubagent={vi.fn().mockResolvedValue(true)}
       t={t}
     />)
 
@@ -101,6 +103,7 @@ describe('ModelSelect reasoning effort', () => {
       directory={directory}
       load={vi.fn()}
       select={vi.fn().mockResolvedValue(true)}
+      selectSubagent={vi.fn().mockResolvedValue(true)}
       t={t}
     />)
 
@@ -123,6 +126,7 @@ describe('ModelSelect reasoning effort', () => {
       directory={directory}
       load={vi.fn()}
       select={select}
+      selectSubagent={vi.fn().mockResolvedValue(true)}
       t={t}
     />)
 
@@ -130,7 +134,7 @@ describe('ModelSelect reasoning effort', () => {
     expect(trigger.textContent).toContain('选择模型')
     fireEvent.click(trigger)
     expect(screen.queryByRole('menuitem', { name: /推理等级/ })).toBeNull()
-    fireEvent.click(screen.getByRole('menuitem', { name: /模型/ }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /^模型/ }))
     expect(screen.queryByText('removed-model')).toBeNull()
     expect(screen.getByRole('menuitemradio', { name: 'DeepSeek-V4-Flash' })).toBeTruthy()
   })
@@ -155,16 +159,53 @@ describe('ModelSelect reasoning effort', () => {
       directory={directory}
       load={vi.fn()}
       select={select}
+      selectSubagent={vi.fn().mockResolvedValue(true)}
       t={t}
     />)
 
     fireEvent.click(screen.getByRole('button', { name: /选择模型|当前/ }))
-    fireEvent.click(screen.getByRole('menuitem', { name: /模型/ }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /^模型/ }))
     fireEvent.click(screen.getByRole('menuitemradio', { name: /DeepSeek-V4-Pro/ }))
     const toast = await screen.findByRole('alert')
     expect(toast.textContent).toContain('模型操作失败：model-unavailable: session already contains images')
     // The selection failure does not render the in-menu load strip (no Retry).
     expect(screen.queryByRole('button', { name: '重试' })).toBeNull()
+  })
+
+  it('selects a subagent model through the subagent pane without touching the main selection', async () => {
+    const groups = [{
+      id: 'deepseek-official',
+      name: 'DeepSeek',
+      models: [
+        { id: 'deepseek-v4-flash', name: 'DeepSeek-V4-Flash', reasoning },
+        { id: 'deepseek-v4-pro', name: 'DeepSeek-V4-Pro' },
+      ],
+    }]
+    const directory = createSnapshotStore<ModelDirectoryState>(state({ groups }))
+    const selectSubagent = vi.fn(async (selection: ModelSelection) => {
+      directory.set(state({ groups, subagent: selection }))
+      return true
+    })
+    render(<ModelSelect
+      locked={false}
+      available
+      directory={directory}
+      load={vi.fn()}
+      select={vi.fn().mockResolvedValue(true)}
+      selectSubagent={selectSubagent}
+      t={t}
+    />)
+
+    fireEvent.click(screen.getByRole('button', { name: /选择模型|当前/ }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /子代理模型/ }))
+    expect(screen.getByRole('menuitemradio', { name: 'DeepSeek-V4-Pro' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('menuitemradio', { name: /DeepSeek-V4-Pro/ }))
+    await waitFor(() => {
+      expect(selectSubagent).toHaveBeenCalledWith({
+        provider: 'deepseek-official',
+        model: 'deepseek-v4-pro',
+      })
+    })
   })
 
   it('renders no Agent-bound control for an addressed subagent session', () => {
@@ -175,6 +216,7 @@ describe('ModelSelect reasoning effort', () => {
       directory={createSnapshotStore(state())}
       load={load}
       select={vi.fn().mockResolvedValue(false)}
+      selectSubagent={vi.fn().mockResolvedValue(false)}
       t={t}
     />)
 

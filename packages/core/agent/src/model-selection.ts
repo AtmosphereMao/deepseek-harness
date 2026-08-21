@@ -24,6 +24,18 @@ export interface ModelSelectionRef {
   assembled: ModelSelection | undefined
 }
 
+/** Mutable model selection applied to subagents one live Agent spawns. */
+export interface SubagentModelSelectionRef {
+  /** Subagent model selected for the next child; undefined inherits the composition's `agentOptions`. */
+  current: ModelSelection | undefined
+}
+
+// Per-agent-scope subagent-model selections, keyed by the scoped Context.
+// Sibling agents extend a shared owner context, so a `ctx.provide` of one
+// service name would collide across them; a WeakMap sidesteps that scope
+// sharing while still releasing the entry with the returned disposer.
+const subagentSelections = new WeakMap<Context, SubagentModelSelectionRef>()
+
 /**
  * Couple one mutable selection to Agent-scoped prompt assembly and request routing.
  * Prompt assembly snapshots the selected model before delegating, then applies
@@ -72,4 +84,30 @@ export function installModelSelection(agentCtx: Context, selection: ModelSelecti
     disposeAssembly()
     disposeRequest()
   }
+}
+
+/**
+ * Register a per-agent subagent-model selection readable through
+ * {@link subagentModelOf}. Subagent tools read it to override their composition
+ * `agentOptions`; a deployment without a Web model surface installs nothing, so
+ * tools there keep inheriting their composition config unchanged.
+ *
+ * @param agentCtx - The selected Agent's scoped context.
+ * @param selection - Mutable subagent-model selection owned by the calling entry point.
+ * @returns Disposer that unregisters the selection.
+ */
+export function installSubagentModelSelection(agentCtx: Context, selection: SubagentModelSelectionRef): () => void {
+  subagentSelections.set(agentCtx, selection)
+  return () => {
+    subagentSelections.delete(agentCtx)
+  }
+}
+
+/**
+ * Read the subagent model selected for one Agent's delegations, if any.
+ * @param agentCtx - The selected Agent's scoped context.
+ * @returns The selected subagent model, or `undefined` when nothing is selected.
+ */
+export function subagentModelOf(agentCtx: Context): ModelSelection | undefined {
+  return subagentSelections.get(agentCtx)?.current
 }

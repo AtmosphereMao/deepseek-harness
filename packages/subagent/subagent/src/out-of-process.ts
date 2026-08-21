@@ -21,12 +21,18 @@ import type { SubagentCapabilities, SubagentResult, SubagentRun, SubagentStopRea
  * another process cannot honor parent-enforced start features
  * (`outputSchema`/`maxDepth`/`toolFilter`/`persona`), so the service rejects a
  * request needing any of them before `start` runs — never accepted-then-ignored.
+ *
+ * `imagePrompt` is false for the same reason: every shipped out-of-process wire
+ * carries text only (ACP drops non-text blocks, the Codex and Claude Code task
+ * builders reject them), so an image-bearing prompt is refused at `start` rather
+ * than reaching a child that could never see the picture.
  */
 export const NO_START_CAPABILITIES: SubagentCapabilities = Object.freeze({
   outputSchema: false,
   depthLimit: false,
   toolFilter: false,
   persona: false,
+  imagePrompt: false,
 })
 
 /**

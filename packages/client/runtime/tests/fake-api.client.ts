@@ -87,6 +87,7 @@ export class FakeApiClient implements IApiClient {
 
   onModels: (payload: unknown) => Promise<RpcResponse<SessionModels>> = () => Promise.resolve(ok({
     current: this.defaultModel,
+    subagent: null,
     routable: true,
     groups: [{
       id: 'deepseek-official',
@@ -96,6 +97,9 @@ export class FakeApiClient implements IApiClient {
     failures: [],
   }))
   onSelectModel: (payload: { provider: string; model: string }) =>
+  Promise<RpcResponse<{ selected: ModelSelection }>> =
+    payload => Promise.resolve(ok({ selected: { provider: payload.provider, model: payload.model } }))
+  onSelectSubagentModel: (payload: { provider: string; model: string }) =>
   Promise<RpcResponse<{ selected: ModelSelection }>> =
     payload => Promise.resolve(ok({ selected: { provider: payload.provider, model: payload.model } }))
   onPrompt: (payload: unknown) => Promise<RpcResponse<{ accepted: true }>> = () => Promise.resolve(ok({ accepted: true as const }))
@@ -149,6 +153,8 @@ export class FakeApiClient implements IApiClient {
     models: (payload: unknown) => this.record('session.models', payload, this.onModels(payload)),
     selectModel: (payload: { provider: string; model: string }) =>
       this.record('session.selectModel', payload, this.onSelectModel(payload)),
+    selectSubagentModel: (payload: { provider: string; model: string }) =>
+      this.record('session.selectSubagentModel', payload, this.onSelectSubagentModel(payload)),
     rename: (payload: unknown) => this.record('session.rename', payload, this.onRename(payload)),
     fork: (payload: unknown) => this.record('session.fork', payload, this.onFork(payload)),
     prompt: (payload: unknown) => this.record('session.prompt', payload, this.onPrompt(payload)),

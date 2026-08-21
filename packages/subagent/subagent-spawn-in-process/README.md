@@ -12,7 +12,7 @@ The shared driver owns depth checking, persona and tool-filter setup, structured
 
 ## Capabilities
 
-Spawn advertises `{ outputSchema: true, depthLimit: true, toolFilter: true, persona: true }` because it controls the child's creation window and can enforce all four features.
+Spawn advertises `{ outputSchema: true, depthLimit: true, toolFilter: true, persona: true, imagePrompt: true }` because it controls the child's creation window and can enforce all four start features. `imagePrompt` holds because the child runs in this process and receives `request.prompt` verbatim, so an image block reaches its model unchanged.
 
 ## Config
 

@@ -15,6 +15,8 @@ import { createSnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
 export interface ModelDirectoryState {
   /** Model selection the host reports for the next assembled step; null before the first load. */
   current: ModelSelection | null
+  /** Subagent model selected for this session; null when none or before the first load. */
+  subagent: ModelSelection | null
   /**
    * Whether an adapter serves the current selection's provider, as the host reports
    * it — null before the first load, which is NOT the same as blocked. Read
@@ -37,7 +39,7 @@ export interface ModelDirectoryState {
 export class ModelDirectory {
   /** The shared snapshot both entries render from (uSES-safe store). */
   readonly store: SnapshotStore<ModelDirectoryState> = createSnapshotStore<ModelDirectoryState>({
-    current: null, routable: null, groups: [], failures: [], status: 'idle', error: null,
+    current: null, subagent: null, routable: null, groups: [], failures: [], status: 'idle', error: null,
   })
 
   /** Latest operation wins; an older response never overwrites a newer one. */
@@ -50,7 +52,7 @@ export class ModelDirectory {
    * @param available - whether this session may use Agent-bound model RPCs.
    */
   constructor(
-    private readonly sessions: Pick<IApiClient['sessions'], 'models' | 'selectModel'>,
+    private readonly sessions: Pick<IApiClient['sessions'], 'models' | 'selectModel' | 'selectSubagentModel'>,
     private readonly sessionId: SessionId,
     private readonly available: () => boolean,
   ) {}
@@ -64,7 +66,13 @@ export class ModelDirectory {
     this.assertAvailable()
     const generation = ++this.generation
     this.store.update((s) => { s.status = 'loading'; s.error = null })
-    const { result } = await this.sessions.models({ sessionId: this.sessionId })
+    let response: Awaited<ReturnType<IApiClient['sessions']['models']>>
+    try {
+      response = await this.sessions.models({ sessionId: this.sessionId })
+    } catch (error: unknown) {
+      this.surface(error, generation)
+    }
+    const { result } = response
     if (this.disposed || generation !== this.generation) {
       if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`)
       return result.value
@@ -73,9 +81,10 @@ export class ModelDirectory {
       this.store.update((s) => { s.status = 'error'; s.error = `${result.error.code}: ${result.error.message}` })
       throw new Error(`session.models failed: ${result.error.code}: ${result.error.message}`)
     }
-    const { current, routable, groups, failures } = result.value
+    const { current, subagent, routable, groups, failures } = result.value
     this.store.update((s) => {
       s.current = current
+      s.subagent = subagent
       s.routable = routable
       s.groups = groups
       s.failures = failures
@@ -95,14 +104,20 @@ export class ModelDirectory {
     this.assertAvailable()
     const generation = ++this.generation
     this.store.update((s) => { s.status = 'selecting'; s.error = null })
-    const { result } = await this.sessions.selectModel({
-      sessionId: this.sessionId,
-      provider: selection.provider,
-      model: selection.model,
-      ...selection.reasoningEffort === undefined
-        ? {}
-        : { reasoningEffort: selection.reasoningEffort },
-    })
+    let response: Awaited<ReturnType<IApiClient['sessions']['selectModel']>>
+    try {
+      response = await this.sessions.selectModel({
+        sessionId: this.sessionId,
+        provider: selection.provider,
+        model: selection.model,
+        ...selection.reasoningEffort === undefined
+          ? {}
+          : { reasoningEffort: selection.reasoningEffort },
+      })
+    } catch (error: unknown) {
+      this.surface(error, generation)
+    }
+    const { result } = response
     if (this.disposed || generation !== this.generation) {
       if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`)
       return
@@ -122,6 +137,44 @@ export class ModelDirectory {
   }
 
   /**
+   * Select the model subagents spawned from this session use. Mirrors {@link select}
+   * but writes the shared `subagent` echo; a rejected route surfaces identically.
+   * @param selection - provider, provider-owned model id, and optional adapter-owned effort.
+   */
+  async selectSubagent(selection: ModelSelection): Promise<void> {
+    this.assertAvailable()
+    const generation = ++this.generation
+    this.store.update((s) => { s.status = 'selecting'; s.error = null })
+    let response: Awaited<ReturnType<IApiClient['sessions']['selectSubagentModel']>>
+    try {
+      response = await this.sessions.selectSubagentModel({
+        sessionId: this.sessionId,
+        provider: selection.provider,
+        model: selection.model,
+        ...selection.reasoningEffort === undefined
+          ? {}
+          : { reasoningEffort: selection.reasoningEffort },
+      })
+    } catch (error: unknown) {
+      this.surface(error, generation)
+    }
+    const { result } = response
+    if (this.disposed || generation !== this.generation) {
+      if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`)
+      return
+    }
+    if (!result.ok) {
+      this.store.update((s) => { s.status = 'error'; s.error = `${result.error.code}: ${result.error.message}` })
+      throw new Error(`session.selectSubagentModel failed: ${result.error.code}: ${result.error.message}`)
+    }
+    this.store.update((s) => {
+      s.subagent = result.value.selected
+      s.status = 'ready'
+      s.error = null
+    })
+  }
+
+  /**
    * Drop the previous Host generation's projection and repull it. Clearing
    * first prevents an unconsumed process-local selection from being displayed
    * while the restarted Host has restored the last logged model selection.
@@ -131,6 +184,7 @@ export class ModelDirectory {
     ++this.generation
     this.store.update((s) => {
       s.current = null
+      s.subagent = null
       s.routable = null
       s.groups = []
       s.failures = []
@@ -150,5 +204,21 @@ export class ModelDirectory {
     if (!this.available()) {
       throw new Error('model selection is unavailable for addressed subagent sessions')
     }
+  }
+
+  /**
+   * Surface a rejected wire call as a store error (only while still the latest
+   * operation), then rethrow so each entry's retry surface still engages. A
+   * rejected transport call otherwise leaves `status` at `loading`/`selecting`
+   * forever, because the business-error branch only runs on an `ok: false` result.
+   * @param error - the rejection.
+   * @param generation - the operation's generation guard.
+   */
+  private surface(error: unknown, generation: number): never {
+    const message = error instanceof Error ? error.message : String(error)
+    if (!this.disposed && generation === this.generation) {
+      this.store.update((s) => { s.status = 'error'; s.error = message })
+    }
+    throw error
   }
 }

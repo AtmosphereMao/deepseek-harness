@@ -153,6 +153,13 @@ export interface SessionModels {
   /** Model selection for the session's next assembled step. */
   current: ModelSelection
   /**
+   * Subagent model selected for this session, or `null` when none: a `null`
+   * means subagents inherit their tool's composition `agentOptions`. Unlike
+   * `current`, this tier has no log or default fallback — it exists only
+   * while the process holds a pick.
+   */
+  subagent: ModelSelection | null
+  /**
    * Whether an adapter currently serves `current.provider`, and therefore
    * whether this session can start a turn at all. Deliberately NOT derivable
    * from `groups`: catalog membership is advisory, so a route serving a model
@@ -294,6 +301,20 @@ export interface SessionsApi {
    * advisory. Session-backed subagents reject with `agent-busy`.
    */
   selectModel(request: RpcRequest<{
+    sessionId: SessionId
+    provider: string
+    model: string
+    reasoningEffort?: string
+  }>):
+  Promise<RpcResponse<{ selected: ModelSelection }>>
+
+  /**
+   * Selects the model subagents spawned from this session use, overriding the
+   * subagent tool's composition `agentOptions` for this session alone. No
+   * default is saved; the override lives only while the process holds it.
+   * Session-backed subagents reject with `agent-busy`.
+   */
+  selectSubagentModel(request: RpcRequest<{
     sessionId: SessionId
     provider: string
     model: string

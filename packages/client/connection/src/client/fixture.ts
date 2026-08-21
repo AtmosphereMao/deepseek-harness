@@ -1522,6 +1522,7 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
     session.sessionId,
     { provider: 'deepseek-official', model: 'deepseek-v4-flash' },
   ]))
+  const subagentModelSelections = new Map<SessionId, ModelSelection>()
   const attachments = new Map<string, { attachment: ImageAttachmentRef; data: string }>([[
     String(FIXTURE_IMAGE_REF.attachmentId),
     { attachment: FIXTURE_IMAGE_REF, data: FIXTURE_IMAGE_DATA },
@@ -2378,6 +2379,7 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
       models: request => ok(request, {
         current: modelSelections.get(request.payload.sessionId)
           ?? { provider: 'deepseek-official', model: 'deepseek-v4-flash' },
+        subagent: subagentModelSelections.get(request.payload.sessionId) ?? null,
         // The fixture's routes all serve; a surface exercising the blocked
         // posture drives it through its own stub.
         routable: true,
@@ -2393,6 +2395,17 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
             : { reasoningEffort: request.payload.reasoningEffort },
         }
         modelSelections.set(request.payload.sessionId, selected)
+        return ok(request, { selected })
+      },
+      selectSubagentModel: (request) => {
+        const selected: ModelSelection = {
+          provider: request.payload.provider,
+          model: request.payload.model,
+          ...request.payload.reasoningEffort === undefined
+            ? {}
+            : { reasoningEffort: request.payload.reasoningEffort },
+        }
+        subagentModelSelections.set(request.payload.sessionId, selected)
         return ok(request, { selected })
       },
       prompt: (request) => {
@@ -3083,6 +3096,7 @@ export class FixtureApiClient extends AbstractApiClient {
       case 'session.history': return this.api.sessions.history(request)
       case 'session.models': return this.api.sessions.models(request)
       case 'session.selectModel': return this.api.sessions.selectModel(request)
+      case 'session.selectSubagentModel': return this.api.sessions.selectSubagentModel(request)
       case 'session.rename': return this.api.sessions.rename(request)
       case 'session.fork': return this.api.sessions.fork(request)
       case 'session.prompt': return this.api.sessions.prompt(request)

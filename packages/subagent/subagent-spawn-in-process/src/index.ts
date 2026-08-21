@@ -39,7 +39,8 @@ export const Config: z<Config> = z.object({
  * creation window).
  */
 class SpawnInProcessProvider implements SubagentProvider {
-  readonly capabilities: SubagentCapabilities = { outputSchema: true, depthLimit: true, toolFilter: true, persona: true }
+  // In-process children receive `request.prompt` verbatim, so image blocks reach the child's model.
+  readonly capabilities: SubagentCapabilities = { outputSchema: true, depthLimit: true, toolFilter: true, persona: true, imagePrompt: true }
   // Context contract: a spawned child starts fresh — it never sees the parent conversation.
   readonly inheritsParentContext = false
 

@@ -25,6 +25,10 @@ Use the ralph tool ONLY when the direct human explicitly asks for a Ralph loop o
 
 Use subagent in the background by default. Start independent delegations together in one assistant message and continue useful work while they run. Set `run_in_background: false` only when your next action depends on that subagent's result. When a background run settles, the runtime sends you a notice containing its outcome and any final assistant message.
 
+An `[image attached: … (attachmentId: …)]` placeholder carries an image your own model cannot see. Pass that attachmentId to subagent as `image_attachment_ids` and report what the child says it shows, rather than guessing or telling the user to switch models.
+
+An `[image attached: … (attachmentId: …)]` placeholder carries an image your own model cannot see. Pass that attachmentId to subagent_fork as `image_attachment_ids` and report what the child says it shows, rather than guessing or telling the user to switch models.
+
 ## Writing code for run_code
 
 `run_code` takes two required arguments: `code` — the body of an async TypeScript function (erasable syntax only — no `enum` or namespaces; type annotations are advisory, the code runs type-stripped) — and `description`, a short summary of what the program does. Inside the program:
@@ -148,7 +152,7 @@ interface ToolArgsMap {
     description: string;
     /** The complete, self-contained task for the subagent. It does not share this conversation's context, so include everything it needs. */
     prompt: string;
-    /** Optional opaque attachment id(s) of images to include in the child's prompt. Pass the `attachmentId` shown in an `[image attached: ...]` placeholder in this conversation. Omit when the task does not involve an image. */
+    /** Optional opaque attachment id(s) of images to include in the child's prompt. Pass the `attachmentId` shown in an `[image attached: ...]` placeholder in this conversation. Use this to see an image your own model cannot: the child may be image-capable, so ask it what the image shows. Omit when the task does not involve an image. */
     image_attachment_ids?: string[];
     /** Whether to run in the background and return a durable subagent id immediately. Defaults to true. Set false to wait for the result when your next action depends on it. */
     run_in_background?: boolean;
@@ -159,7 +163,7 @@ interface ToolArgsMap {
     description: string;
     /** The task for the subagent. It already sees this conversation's completed turns, so build on them freely and state only what is new. */
     prompt: string;
-    /** Optional opaque attachment id(s) of images to include in the child's prompt. Pass the `attachmentId` shown in an `[image attached: ...]` placeholder in this conversation. Omit when the task does not involve an image. */
+    /** Optional opaque attachment id(s) of images to include in the child's prompt. Pass the `attachmentId` shown in an `[image attached: ...]` placeholder in this conversation. Use this to see an image your own model cannot: the child may be image-capable, so ask it what the image shows. Omit when the task does not involve an image. */
     image_attachment_ids?: string[];
   } & Record<string, JsonValue>;
   /** Record and update a structured task list for the current work. Send the ENTIRE list every call — it REPLACES the previous list (there are no partial updates, no per-item edits). Use it to plan multi-step work and show progress: add one todo per concrete step before you start. Mark every todo being actively worked on `in_progress` — several at once when work genuinely runs in parallel (e.g. concurrent subagents or background commands), one for sequential work; while work remains, at least one task should be `in_progress`. Mark a todo `completed` the moment it is done (do not batch completions), and allow no `in_progress` item only once all work is complete. Skip the list for trivial single-step tasks. Statuses: `pending` (not started), `in_progress` (being worked on now), `completed` (finished). */

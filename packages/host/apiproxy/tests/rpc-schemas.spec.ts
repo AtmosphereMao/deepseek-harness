@@ -206,6 +206,7 @@ describe('sessions domain schemas', () => {
     expect(sessionModelsRequestSchema.parse({ sessionId: 's1' }).sessionId).toBe('s1')
     expect(sessionModelsValueSchema.parse({
       current: { provider: 'deepseek-official', model: 'deepseek-v4-flash', reasoningEffort: 'max' },
+      subagent: { provider: 'deepseek-official', model: 'deepseek-v4-pro' },
       routable: true,
       groups: [{
         id: 'deepseek-official',

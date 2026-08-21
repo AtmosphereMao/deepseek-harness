@@ -169,6 +169,9 @@ export function apply(ctx: ClientContext): void {
           select: (selection: ModelSelection) => available
             ? directory.select(selection).then(() => true, () => false)
             : Promise.resolve(false),
+          selectSubagent: (selection: ModelSelection) => available
+            ? directory.selectSubagent(selection).then(() => true, () => false)
+            : Promise.resolve(false),
         }
       },
     }, ModelSelect))

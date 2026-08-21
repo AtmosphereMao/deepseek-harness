@@ -11,6 +11,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { defineTool } from '@deepseek-ai/dsh-tools'
+import { subagentModelOf } from '@deepseek-ai/dsh-agent'
 import type { AgentOptions } from '@deepseek-ai/dsh-agent'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import type { JsonValue, SessionEvent } from '@deepseek-ai/dsh-session'
@@ -264,6 +265,21 @@ function providerWording(inheritsConversation: boolean): { description: string; 
   }
 }
 
+/**
+ * Guidance that turns an unreadable image into a delegation. A text-only route
+ * receives every image as an `[image attached: … (attachmentId: …)]` placeholder
+ * (the wire adapters' serialize-time transform), which carries the id but no
+ * pixels; without this the model reads the placeholder as a dead end and asks
+ * the user to switch models even though a vision-capable child is reachable.
+ * @param toolName - the model-facing delegation tool name to instruct on.
+ * @returns the prompt clause naming the placeholder, the parameter, and the ask.
+ */
+function imageDelegationGuidance(toolName: string): string {
+  return 'An `[image attached: … (attachmentId: …)]` placeholder carries an image your own model cannot see. '
+    + `Pass that attachmentId to ${toolName} as \`image_attachment_ids\` and report what the child says it shows, `
+    + 'rather than guessing or telling the user to switch models.'
+}
+
 interface DelegationRunRequest {
   readonly run_in_background?: boolean
 }
@@ -344,13 +360,19 @@ export function apply(ctx: Context, config: Config): void {
           required: true,
           description: wording.promptDescription,
         },
-        image_attachment_ids: {
-          type: 'array',
-          items: { type: 'string' },
-          description: 'Optional opaque attachment id(s) of images to include in the child\'s prompt. '
-            + 'Pass the `attachmentId` shown in an `[image attached: ...]` placeholder in this conversation. '
-            + 'Omit when the task does not involve an image.',
-        },
+        // Offered only when the provider's wire carries image blocks; the
+        // service rejects an image-bearing prompt elsewhere, so advertising the
+        // parameter there would be a standing lie.
+        ...provider.capabilities.imagePrompt ? {
+          image_attachment_ids: {
+            type: 'array' as const,
+            items: { type: 'string' as const },
+            description: 'Optional opaque attachment id(s) of images to include in the child\'s prompt. '
+              + 'Pass the `attachmentId` shown in an `[image attached: ...]` placeholder in this conversation. '
+              + 'Use this to see an image your own model cannot: the child may be image-capable, so ask it what the image shows. '
+              + 'Omit when the task does not involve an image.',
+          },
+        } : {},
         ...backgroundEnabled ? {
           run_in_background: {
             type: 'boolean' as const,
@@ -411,6 +433,11 @@ export function apply(ctx: Context, config: Config): void {
 
         const maxDepth = typeof config.maxDepth === 'number' ? config.maxDepth : undefined
         const promptBlocks: ContentBlock[] = []
+        // The validator permits undeclared keys, so schema omission also needs
+        // execution-time enforcement (same stance as `run_in_background`).
+        if (!provider.capabilities.imagePrompt && (args.image_attachment_ids?.length ?? 0) > 0) {
+          throw new Error(`image_attachment_ids is not supported by subagent provider "${provider.name}": its wire carries text only`)
+        }
         for (const attachmentId of args.image_attachment_ids ?? []) {
           const trimmed = attachmentId.trim()
           if (trimmed.length === 0) continue
@@ -422,11 +449,24 @@ export function apply(ctx: Context, config: Config): void {
         }
         promptBlocks.push({ type: 'text', text: args.prompt })
 
+        // A Web model surface may have selected a subagent model for this
+        // session; it overrides the composition `agentOptions` route while
+        // still inheriting the composition's maxTokens (and the parent's, when
+        // the composition configured none).
+        const subagentModel = subagentModelOf(parent.ctx)
+        const agentOptions = subagentModel === undefined
+          ? config.agentOptions
+          : {
+            ...config.agentOptions !== undefined ? config.agentOptions : {},
+            provider: subagentModel.provider,
+            model: subagentModel.model,
+          }
+
         const request = {
           label: args.description,
           prompt: promptBlocks,
           parent,
-          ...config.agentOptions !== undefined ? { agentOptions: config.agentOptions } : {},
+          ...agentOptions !== undefined ? { agentOptions } : {},
           ...config.persona !== undefined ? { persona: config.persona } : {},
           ...config.toolFilter !== undefined ? { toolFilter: config.toolFilter } : {},
           ...maxDepth !== undefined ? { maxDepth } : {},
@@ -500,16 +540,25 @@ export function apply(ctx: Context, config: Config): void {
     // A backend fiber may activate later; a misspelled provider remains visible in this log.
     ctx.logger.info(`subagent provider "${config.provider}" not registered yet; the "${config.toolName ?? 'subagent'}" tool will register when it appears`)
   }
-  if (backgroundEnabled && continuable) {
-    // The section follows provider availability without its own manual
-    // lifecycle: empty text is omitted from rendered prompts while the tool is
-    // absent, and the registration itself stays owned by this plugin fiber.
-    ctx.systemPrompt.section({
-      name: `tool:${toolName}`,
-      order: SUBAGENT_SECTION_ORDER,
-      text: context => disposeTool === undefined || ctx.tools.get(toolName, context.scope) === undefined
-        ? ''
-        : `Use ${toolName} in the background by default. Start independent delegations together in one assistant message and continue useful work while they run. Set \`run_in_background: false\` only when your next action depends on that subagent's result. When a background run settles, the runtime sends you a notice containing its outcome and any final assistant message.`,
-    })
-  }
+  // The section follows provider availability without its own manual
+  // lifecycle: empty text is omitted from rendered prompts while the tool is
+  // absent, and the registration itself stays owned by this plugin fiber.
+  ctx.systemPrompt.section({
+    name: `tool:${toolName}`,
+    order: SUBAGENT_SECTION_ORDER,
+    text: (context) => {
+      if (disposeTool === undefined || ctx.tools.get(toolName, context.scope) === undefined) return ''
+      const clauses: string[] = []
+      if (backgroundEnabled && continuable) {
+        clauses.push(`Use ${toolName} in the background by default. Start independent delegations together in one assistant message and continue useful work while they run. Set \`run_in_background: false\` only when your next action depends on that subagent's result. When a background run settles, the runtime sends you a notice containing its outcome and any final assistant message.`)
+      }
+      // Only advertise image delegation on a provider whose wire actually
+      // carries image blocks; elsewhere `start` rejects such a prompt, so the
+      // guidance would send the model at a guaranteed failure.
+      if (ctx.subagents.getProvider(config.provider)?.capabilities.imagePrompt === true) {
+        clauses.push(imageDelegationGuidance(toolName))
+      }
+      return clauses.join('\n\n')
+    },
+  })
 }

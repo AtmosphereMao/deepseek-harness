@@ -144,7 +144,12 @@ function resolveCwd(configured: string | undefined, request: SubagentStartReques
  * a request needing any of them before `start` runs).
  */
 class AcpProvider implements SubagentProvider {
-  readonly capabilities: SubagentCapabilities = { outputSchema: false, depthLimit: false, toolFilter: false, persona: false }
+  // `imagePrompt: false` matches `toAcpPrompt`, which emits text blocks only: an
+  // image-bearing prompt is now refused at `start` instead of silently losing
+  // the picture on the way to the child.
+  readonly capabilities: SubagentCapabilities = {
+    outputSchema: false, depthLimit: false, toolFilter: false, persona: false, imagePrompt: false,
+  }
   // Context contract: an out-of-process ACP child starts fresh — no parent conversation crosses the process boundary.
   readonly inheritsParentContext = false
 

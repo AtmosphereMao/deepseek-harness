@@ -445,6 +445,39 @@ describe('Web session model selection', () => {
     await ctx.fiber.dispose()
   })
 
+  it('selects a subagent model per session and reports it on the directory', async () => {
+    const { ctx, sessionId } = await harness()
+    const api = createApiProxy(ctx, {
+      defaultModelSelection: () => ({ provider: 'deepseek-official', model: 'deepseek-chat' }),
+      cwd: '/tmp',
+    })
+
+    // No pick yet: the directory reports null so the tool inherits its composition config.
+    expect(expectValue(await api.sessions.models(request({ sessionId }))).subagent).toBeNull()
+
+    const selected = expectValue(await api.sessions.selectSubagentModel(request({
+      sessionId,
+      provider: 'deepseek-official',
+      model: 'deepseek-reasoner',
+    })))
+    expect(selected.selected).toEqual({
+      provider: 'deepseek-official',
+      model: 'deepseek-reasoner',
+      reasoningEffort: 'high',
+    })
+    expect(expectValue(await api.sessions.models(request({ sessionId }))).subagent)
+      .toEqual({ provider: 'deepseek-official', model: 'deepseek-reasoner', reasoningEffort: 'high' })
+
+    // A refused route keeps the prior subagent selection intact.
+    const rejected = await api.sessions.selectSubagentModel(request({
+      sessionId, provider: 'missing', model: 'model',
+    }))
+    expect(rejected.result).toMatchObject({ ok: false, error: { code: 'model-unavailable' } })
+    expect(expectValue(await api.sessions.models(request({ sessionId }))).subagent)
+      .toEqual({ provider: 'deepseek-official', model: 'deepseek-reasoner', reasoningEffort: 'high' })
+    await ctx.fiber.dispose()
+  })
+
   it('refuses a prompt no adapter can route, and reports it on the directory', async () => {
     const { ctx, sessionId } = await harness()
     const api = createApiProxy(ctx, {

@@ -20,7 +20,7 @@ SDK 客户端返回自有子活动，而不是提示词结果。提供方读取�
 
 ## 能力与上下文
 
-Provider 不宣告任何启动期能力（`outputSchema`/`depthLimit`/`toolFilter`/`persona` 全为 false），且 `inheritsParentContext: false`：子进程是另一进程里的全新运行时，唯一来自父方的输入是工作区 cwd。基于本 provider 的 `dsh-tool-subagent` 部署应设置 `maxDepth: 'provider-managed'`——子 harness 拥有自己的递归预算。
+Provider 不宣告任何启动期能力（`outputSchema`/`depthLimit`/`toolFilter`/`persona`/`imagePrompt` 全为 false），且 `inheritsParentContext: false`：子进程是另一进程里的全新运行时，唯一来自父方的输入是工作区 cwd。带图片的提示词会在 `start` 阶段被拒绝，而不是丢掉图片后再送达。基于本 provider 的 `dsh-tool-subagent` 部署应设置 `maxDepth: 'provider-managed'`——子 harness 拥有自己的递归预算。
 
 ## 配置
 

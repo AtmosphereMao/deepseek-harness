@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-19-text-only-image-placeholder-fallback.md
-2026-08-19-text-only-image-placeholder-fallback.md: 3e1a49d91fec78fdcc1730e7eb56f520b792e60a
-2026-08-19-text-only-image-placeholder-fallback.zh.md: 48fc5f270ff7f2c053e9ebb1112647be330d3fbd
+2026-08-19-text-only-image-placeholder-fallback.md: a87f235cc6eb6df9d1fefd03180c8612b5d1eac2
+2026-08-19-text-only-image-placeholder-fallback.zh.md: 7613f63f87df9eaf20b10d44eede410fbe9fbd6a
