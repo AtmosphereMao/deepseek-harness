@@ -6,8 +6,9 @@
  * Export discipline: packages/client/AGENTS.md.
  */
 
+import { useSyncExternalStore } from 'react'
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
-import { bindSnapshotSelector } from '@deepseek-ai/dsh-client-web-react'
+import type { HostObservable, SnapshotSelectorHook } from '@deepseek-ai/dsh-client-ui-slots'
 // Type-only: the settings shell's SlotMap merge (the 'settings.section' entry)
 // plus the ctx.settingsScope Context merge.
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
@@ -31,6 +32,27 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 const NS = 'settings.network'
 
 /**
+ * Bind the settings scope to a typed selector hook over React's
+ * `useSyncExternalStore`. A plugin bundle resolves externals against the
+ * platform static module table, which carries `react` but not the renderer
+ * package that owns the shared binder, so the hook is constructed here.
+ * `subscribe`/`getSnapshot` are captured once per source into stable closures
+ * so components never resubscribe across renders. The optional equality
+ * argument is accepted for signature compatibility and unused: the scope
+ * replaces its snapshot reference only on change, so identity is already the
+ * change signal.
+ * @param source - the settings scope, read as a bare observable snapshot source.
+ * @returns the selector hook consumed by the section component.
+ */
+function bindScopeSelector<T>(source: HostObservable<T>): SnapshotSelectorHook<T> {
+  const subscribe = (fn: () => void): (() => void) => source.subscribe(fn)
+  const getSnapshot = (): T => source.getSnapshot()
+  return function useSelector<S>(sel: (s: T) => S): S {
+    return sel(useSyncExternalStore(subscribe, getSnapshot))
+  }
+}
+
+/**
  * Required services (cordis fiber inject). The target slot is declared by
  * ui-settings' apply, whose activation order relative to this one is NOT
  * constrained; registration depends on the slot through `slots.inject()`.
@@ -50,7 +72,7 @@ export function apply(ctx: ClientContext): void {
 
   const t = ctx.locale.bind(NS) as NetworkSectionInjected['t']
   const scope = ctx.settingsScope.bind<NetworkSettings>({ namespace: 'http' })
-  const useSnapshot = bindSnapshotSelector(scope)
+  const useSnapshot = bindScopeSelector(scope)
 
   const injected = (): NetworkSectionInjected => ({
     useSnapshot,

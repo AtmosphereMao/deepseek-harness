@@ -5,14 +5,18 @@ import { describe, expect, it, vi } from 'vitest'
 import { resolveSlotLabel } from '@deepseek-ai/dsh-client-ui-slots'
 import { SlotRegistry } from '@deepseek-ai/dsh-client-runtime/client'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
-import { SettingsScopeBinder } from '@deepseek-ai/dsh-client-ui-settings/client'
+import { apply as settingsApply, inject as settingsInject } from '@deepseek-ai/dsh-client-ui-settings/client'
 import { apply, inject } from '@deepseek-ai/dsh-client-ui-settings-network/client'
 import type { NetworkSectionInjected } from '@deepseek-ai/dsh-client-ui-settings-network/client'
 
 async function bench() {
   const ctx = new Context()
   await ctx.plugin(SlotRegistry).await()
-  ctx.provide('locale', new LocaleRuntime(ctx))
+  // Node exposes no browser language list, so a fresh LocaleRuntime opens on
+  // FALLBACK_LOCALE (en); the zh dictionary under test is staged explicitly.
+  const locale = new LocaleRuntime(ctx)
+  locale.setLocale('zh')
+  ctx.provide('locale', locale)
   ctx.provide('remote', { $on: vi.fn(() => () => {}) } as never)
   const mutate = vi.fn(() => Promise.resolve({ rpcId: 'm', result: { ok: false, error: {} } }))
   ctx.provide('connection', {
@@ -24,7 +28,7 @@ async function bench() {
       },
     },
   } as never)
-  await ctx.plugin(SettingsScopeBinder).await()
+  await ctx.plugin({ inject: [...settingsInject], apply: settingsApply }).await()
   return { ctx, slots: ctx.get('slots') as SlotRegistry, mutate }
 }
 
