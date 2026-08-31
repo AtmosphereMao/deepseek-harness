@@ -81,7 +81,7 @@ function fakeResponse(): {
   return { response, state }
 }
 
-async function mounted(config?: { trustedHosts?: string[] }): Promise<{
+async function mounted(config?: { trustedHosts?: string[]; browserAuth?: boolean }): Promise<{
   routes: WebRoute[]
   upgrades: WebUpgradeRoute[]
   connection: HostConnectionHandle
@@ -235,6 +235,18 @@ describe('connection node half', () => {
       host: 'harness.example',
       cookie: browserCookie(connection, 'harness.example'),
     }))).toBeUndefined()
+    await dispose()
+  })
+
+  it('skips browser authentication when the config disables it, leaving only the trust fence', async () => {
+    const { connection, dispose } = await mounted({ trustedHosts: ['harness.example'], browserAuth: false })
+
+    // A trusted authority passes without any session cookie, and the URL it
+    // announces carries no launch token.
+    expect(connection.requestRejection(fakeRequest({ host: 'harness.example' }))).toBeUndefined()
+    expect(new URL(connection.authenticatedUrl('http://harness.example')).search).toBe('')
+    // An untrusted authority still fails the Host/Origin fence.
+    expect(connection.requestRejection(fakeRequest({ host: 'evil.example' }))).toBe(403)
     await dispose()
   })
 
