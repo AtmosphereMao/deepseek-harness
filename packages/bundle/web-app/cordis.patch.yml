@@ -163,9 +163,10 @@
 
     # Owns both ends of the web transport: node half binds the gateway to the
     # webserver under /api; browser half is the fetch/SSE client.
-    # Browser authentication is disabled: web-auth owns the surface gate (the
-    # DSH_WEB_PASSWORD row above), and unset password means unauthenticated
-    # access behind the Host/Origin fence alone.
+    # Browser authentication is loopback-exempt: loopback requests pass the
+    # Host/Origin fence alone (web-auth's password gate still covers them), while
+    # non-loopback requests must present the launch token too — so a remote
+    # visitor needs both the ?token= URL and the password.
     - id: connection
       name: '@deepseek-ai/dsh-client-connection'
       inject: [webRuntime]
@@ -174,7 +175,7 @@
         # A deployment adding authorities keeps this expression and concatenates
         # its literals, for example: ['app.internal', ...ctx.webRuntime.trustedHosts].
         trustedHosts: !!js ctx.webRuntime.trustedHosts
-        browserAuth: false
+        browserAuth: 'loopback-exempt'
 
     - id: api-remotes
       name: '@deepseek-ai/dsh-api-remotes'

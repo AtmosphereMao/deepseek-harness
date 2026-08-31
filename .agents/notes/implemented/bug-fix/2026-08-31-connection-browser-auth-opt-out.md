@@ -1,4 +1,4 @@
-# Agent Note: Browser authentication is opt-out so web-auth owns the surface gate
+# Agent Note: Browser authentication is configurable so web-auth gates remote and local access
 
 Status: implemented
 
@@ -10,13 +10,13 @@ The Web shell authenticates with the web-auth password gate: with no `DSH_WEB_PA
 
 ## Decision
 
-`dsh-client-connection`'s `browserAuth` config (schema default `true`) makes the token fence optional. When `false`, `apply` does not create a `BrowserAuth`; `requestRejection` applies only the Host/Origin fence, `authorizeIndex` serves the index, and `authenticatedUrl` returns the clean URL. The `dsh-web-app` bundle sets `browserAuth: false` so web-auth remains the sole surface gate, while upstream consumers keep the default token fence unchanged.
+`dsh-client-connection`'s `browserAuth` config is a three-way switch (schema default `always`). `always` requires the token for every request; `loopback-exempt` requires it only for non-loopback requests, so a remote visitor must present both the `?token=` URL and web-auth's password while a loopback visitor passes the Host/Origin fence and the password gate alone; `never` disables the fence entirely. The `dsh-web-app` bundle sets `browserAuth: 'loopback-exempt'`, and upstream consumers keep the default `always`.
 
 ## Alternatives considered
 
 ### Why not keep the token fence always on?
 
-Keeping upstream's always-on `BrowserAuth` preserves its per-launch CSRF token, but it forces the `?token=` URL even when web-auth's password gate is the intended (or absent) gate. That breaks the fork's unauthenticated-by-default surface and the public access that relies on the trust fence plus the password gate.
+Keeping upstream's always-on `BrowserAuth` preserves its per-launch CSRF token, but it forces the `?token=` URL even on loopback when web-auth's password gate is the intended gate. That breaks the fork's loopback-with-password-only surface.
 
 ### Why not restore the fork's apiProxy connection?
 
@@ -24,4 +24,4 @@ Restoring the pre-sync connection keeps `allowRemotePrivileged`, but the fork's 
 
 ## Consequences
 
-Bought: web-auth's password gate is the sole surface gate, and the Web shell is unauthenticated behind the Host/Origin fence when no password is set. Cost: with `browserAuth: false` the surface loses `BrowserAuth`'s per-launch token, so a deployment that wants the token must set `browserAuth: true`; upstream consumers are unaffected because the default stays `true`.
+Bought: loopback access needs only web-auth's password, while remote access needs both the token and the password — double protection on the public surface. Cost: loopback loses `BrowserAuth`'s per-launch token, so a loopback caller is identified by the Host/Origin fence rather than a secret; upstream consumers are unaffected because the default stays `always`.

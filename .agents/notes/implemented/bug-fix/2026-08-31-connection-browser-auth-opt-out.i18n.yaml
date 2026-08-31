@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-08-31-connection-browser-auth-opt-out.md
-2026-08-31-connection-browser-auth-opt-out.md: fed4356f42838548543f57dbc38f0fb9edb517a3
-2026-08-31-connection-browser-auth-opt-out.zh.md: e5196f8494e78d5415497e44d2ebb5a36d11f7e2
+2026-08-31-connection-browser-auth-opt-out.md: a2ba51f6c415d688887a4f4c684a8dbf73e3793c
+2026-08-31-connection-browser-auth-opt-out.zh.md: 92ffcdfb25525bd5d76a47b4981459bb595bb7a2

@@ -82,19 +82,20 @@ export interface ConnectionConfig {
   /** Maximum buffered JSON body for every `/api` request. Default: 300 MiB. */
   maxRequestBodyBytes?: number
   /**
-   * Enable the launch-token / persistent-cookie authentication fence. Default
-   * true. Disable when a separate authentication layer (for example web-auth's
-   * password gate) already owns the surface, restoring unauthenticated access
-   * behind the Host/Origin trust fence alone.
+   * Launch-token / persistent-cookie authentication fence. `always` requires it
+   * for every request; `loopback-exempt` requires it only for non-loopback
+   * requests so a separate gate (for example web-auth's password) still covers
+   * loopback; `never` disables it, leaving the Host/Origin trust fence alone.
+   * Default `always`.
    */
-  browserAuth?: boolean
+  browserAuth?: 'always' | 'loopback-exempt' | 'never'
 }
 
 export const Config: z<ConnectionConfig> = z.object({
   trustedHosts: z.array(String).default([]),
   cookieMaxAgeDays: z.natural().min(1).default(30),
   maxRequestBodyBytes: z.natural().min(1).default(DEFAULT_MAX_REQUEST_BODY_BYTES),
-  browserAuth: z.boolean().default(true),
+  browserAuth: z.union(['always', 'loopback-exempt', 'never'] as const).default('always'),
 })
 
 /**
@@ -109,7 +110,7 @@ export async function apply(ctx: Context, config?: ConnectionConfig): Promise<vo
   const trustedHosts = config?.trustedHosts ?? []
   const cookieMaxAgeDays = config?.cookieMaxAgeDays ?? 30
   const maxRequestBodyBytes = config?.maxRequestBodyBytes ?? DEFAULT_MAX_REQUEST_BODY_BYTES
-  const browserAuthEnabled = config?.browserAuth ?? true
+  const browserAuth = config?.browserAuth ?? 'always'
   // Config boundary: a malformed entry fails the load loudly here rather than
   // silently authorizing its hostname prefix at request time.
   for (const entry of trustedHosts) assertTrustedAuthority(entry)
@@ -117,9 +118,9 @@ export async function apply(ctx: Context, config?: ConnectionConfig): Promise<vo
   const connection = new HostConnectionService(
     ctx,
     trustedHosts,
-    browserAuthEnabled
-      ? await BrowserAuth.create(ctx.root, ctx.credentials, cookieMaxAgeDays)
-      : undefined,
+    browserAuth === 'never'
+      ? undefined
+      : await BrowserAuth.create(ctx.root, ctx.credentials, cookieMaxAgeDays, browserAuth === 'loopback-exempt'),
   )
   const fetchHandler = connection.createSharedFetchHandler(API_PATH)
   const route: WebRoute = {

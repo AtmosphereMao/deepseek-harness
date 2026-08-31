@@ -8,6 +8,7 @@ import type {
   ConnectionIndexResponse,
   ConnectionTrustRequest,
 } from './rpc.ts'
+import { isLoopbackHostname } from './loopback-hostname.ts'
 
 const AUTH_RECORD_KEY = credentialKey('client-connection', 'browser-session')
 const DAY_MILLISECONDS = 24 * 60 * 60 * 1000
@@ -72,6 +73,17 @@ function requestAuthority(headers: ConnectionTrustRequest['headers']): string | 
   if (host === undefined) return undefined
   try {
     return new URL(`http://${host}`).host
+  } catch {
+    return undefined
+  }
+}
+
+/** Request hostname, without the port, for loopback classification. */
+function requestHostname(headers: ConnectionTrustRequest['headers']): string | undefined {
+  const host = header(headers, 'host')
+  if (host === undefined) return undefined
+  try {
+    return new URL(`http://${host}`).hostname
   } catch {
     return undefined
   }
@@ -190,6 +202,7 @@ export class BrowserAuth {
     processOwner: object,
     private readonly secret: Buffer,
     maxAgeDays: number,
+    private readonly loopbackExempt: boolean,
   ) {
     this.launchToken = processLaunchToken(processOwner)
     this.maxAgeMilliseconds = maxAgeDays * DAY_MILLISECONDS
@@ -205,14 +218,16 @@ export class BrowserAuth {
    * @param processOwner - root application context retaining one token across Connection reloads.
    * @param credentials - persistent credential provider for the Web profile.
    * @param maxAgeDays - positive absolute browser-cookie lifetime in days.
+   * @param loopbackExempt - when true, loopback requests bypass the token fence entirely.
    * @returns initialized authentication owner with the process owner's launch token.
    */
   static async create(
     processOwner: object,
     credentials: CredentialProvider,
     maxAgeDays: number,
+    loopbackExempt: boolean,
   ): Promise<BrowserAuth> {
-    return new BrowserAuth(processOwner, await initializeSecret(credentials), maxAgeDays)
+    return new BrowserAuth(processOwner, await initializeSecret(credentials), maxAgeDays, loopbackExempt)
   }
 
   /**
@@ -225,6 +240,7 @@ export class BrowserAuth {
     url.pathname = '/'
     url.search = ''
     url.hash = ''
+    if (this.loopbackExempt && isLoopbackHostname(url.hostname)) return url.href
     url.searchParams.set(TOKEN_QUERY, this.launchToken)
     return url.href
   }
@@ -238,6 +254,10 @@ export class BrowserAuth {
    * @returns true only when the caller may serve index.html.
    */
   authorizeIndex(req: ConnectionIndexRequest, res: ConnectionIndexResponse): boolean {
+    if (this.loopbackExempt) {
+      const hostname = requestHostname(req.headers)
+      if (hostname !== undefined && isLoopbackHostname(hostname)) return true
+    }
     /* v8 ignore next -- node:http always supplies url on server requests. */
     const url = new URL(req.url ?? '/', 'http://dsh.invalid')
     const tokens = url.searchParams.getAll(TOKEN_QUERY)
@@ -287,6 +307,10 @@ export class BrowserAuth {
    * @returns true only for an unexpired cookie signed by this activation's loaded secret.
    */
   isAuthenticated(request: ConnectionTrustRequest): boolean {
+    if (this.loopbackExempt) {
+      const hostname = requestHostname(request.headers)
+      if (hostname !== undefined && isLoopbackHostname(hostname)) return true
+    }
     const authority = requestAuthority(request.headers)
     const rawCookie = header(request.headers, 'cookie')
     if (authority === undefined || rawCookie === undefined) return false

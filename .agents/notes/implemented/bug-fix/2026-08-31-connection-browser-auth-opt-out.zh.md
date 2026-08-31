@@ -1,4 +1,4 @@
-# Agent Note：浏览器认证改为可关闭，让 web-auth 独占表面门控
+# Agent Note：浏览器认证改为可配置，让 web-auth 分别门控远程与本机访问
 
 Status: implemented
 
@@ -10,13 +10,13 @@ Web 外壳用 web-auth 密码门控做认证：未设置 `DSH_WEB_PASSWORD` 时�
 
 ## 决策
 
-`dsh-client-connection` 的 `browserAuth` 配置（schema 默认 `true`）使 token 栅栏变为可选。为 `false` 时，`apply` 不创建 `BrowserAuth`；`requestRejection` 只应用 Host/Origin 栅栏，`authorizeIndex` 直接放行 index，`authenticatedUrl` 返回不带 token 的干净 URL。`dsh-web-app` bundle 将 `browserAuth` 设为 `false`，使 web-auth 保持为唯一的表面门控；上游消费方则沿用默认的 token 栅栏，行为不变。
+`dsh-client-connection` 的 `browserAuth` 配置是三态开关（schema 默认 `always`）。`always` 对所有请求都要求 token；`loopback-exempt` 只对非 loopback 请求要求 token，因此远程访客必须同时出示 `?token=` URL 与 web-auth 密码，而 loopback 访客只需通过 Host/Origin 栅栏与密码门控；`never` 则完全关闭该栅栏。`dsh-web-app` bundle 将 `browserAuth` 设为 `loopback-exempt`，上游消费方则沿用默认的 `always`。
 
 ## 备选方案
 
 ### 为何不保留始终开启的 token 栅栏
 
-保留上游始终开启的 `BrowserAuth` 能保住其每次启动的 CSRF token，但即使在 web-auth 密码门控才是预期（或缺失）门控时也强制 `?token=` URL。这会破坏 fork 的默认未认证表面，以及依赖信任栅栏加密码门控的公网访问。
+保留上游始终开启的 `BrowserAuth` 能保住其每次启动的 CSRF token，但即使在 web-auth 密码门控才是预期门控时也对 loopback 强制 `?token=` URL。这会破坏 fork 的「本机仅密码」表面。
 
 ### 为何不恢复 fork 的 apiProxy 连接
 
@@ -24,4 +24,4 @@ Web 外壳用 web-auth 密码门控做认证：未设置 `DSH_WEB_PASSWORD` 时�
 
 ## 影响
 
-所得：web-auth 密码门控成为唯一的表面门控，未设密码时 Web 外壳在 Host/Origin 栅栏之后保持未认证。所失：`browserAuth: false` 时表面失去 `BrowserAuth` 的每次启动 token，因此需要该 token 的部署必须显式设置 `browserAuth: true`；上游消费方不受影响，因为默认仍为 `true`。
+所得：本机访问只需 web-auth 密码，远程访问则需 token 加密码——公网表面得到双重保障。所失：loopback 失去 `BrowserAuth` 的每次启动 token，因此 loopback 调用方靠 Host/Origin 栅栏而非秘密令牌来识别；上游消费方不受影响，因为默认仍为 `always`。

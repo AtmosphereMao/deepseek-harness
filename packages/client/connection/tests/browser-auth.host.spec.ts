@@ -56,7 +56,7 @@ function createAuth(
   maxAgeDays = 30,
   processOwner: object = {},
 ): Promise<BrowserAuth> {
-  return BrowserAuth.create(processOwner, credentials(store), maxAgeDays)
+  return BrowserAuth.create(processOwner, credentials(store), maxAgeDays, false)
 }
 
 function request(url: string, authority = '127.0.0.1:3080', init?: {

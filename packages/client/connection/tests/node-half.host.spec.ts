@@ -81,7 +81,7 @@ function fakeResponse(): {
   return { response, state }
 }
 
-async function mounted(config?: { trustedHosts?: string[]; browserAuth?: boolean }): Promise<{
+async function mounted(config?: { trustedHosts?: string[]; browserAuth?: 'always' | 'loopback-exempt' | 'never' }): Promise<{
   routes: WebRoute[]
   upgrades: WebUpgradeRoute[]
   connection: HostConnectionHandle
@@ -239,7 +239,7 @@ describe('connection node half', () => {
   })
 
   it('skips browser authentication when the config disables it, leaving only the trust fence', async () => {
-    const { connection, dispose } = await mounted({ trustedHosts: ['harness.example'], browserAuth: false })
+    const { connection, dispose } = await mounted({ trustedHosts: ['harness.example'], browserAuth: 'never' })
 
     // A trusted authority passes without any session cookie, and the URL it
     // announces carries no launch token.
@@ -247,6 +247,22 @@ describe('connection node half', () => {
     expect(new URL(connection.authenticatedUrl('http://harness.example')).search).toBe('')
     // An untrusted authority still fails the Host/Origin fence.
     expect(connection.requestRejection(fakeRequest({ host: 'evil.example' }))).toBe(403)
+    await dispose()
+  })
+
+  it('exempts loopback from the token fence while remote requests still require it', async () => {
+    const { connection, dispose } = await mounted({ trustedHosts: ['harness.example'], browserAuth: 'loopback-exempt' })
+
+    // Loopback passes without a cookie and its URL carries no token.
+    expect(connection.requestRejection(fakeRequest({ host: '127.0.0.1:3080' }))).toBeUndefined()
+    expect(new URL(connection.authenticatedUrl('http://127.0.0.1:3080')).search).toBe('')
+    // A declared remote authority needs a session cookie, and its URL carries the token.
+    expect(connection.requestRejection(fakeRequest({ host: 'harness.example' }))).toBe(401)
+    expect(new URL(connection.authenticatedUrl('http://harness.example')).search).toContain('token=')
+    expect(connection.requestRejection(fakeRequest({
+      host: 'harness.example',
+      cookie: browserCookie(connection, 'harness.example'),
+    }))).toBeUndefined()
     await dispose()
   })
 
