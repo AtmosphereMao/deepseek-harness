@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-Network 设置页：一个 HTTP(S) 代理字段，写入由 Host 侧 [`@deepseek-ai/dsh-http`](../../http/http/README.md) 所拥有的 `http` 设置命名空间。本包只拥有页面本身——字段、文案与写入路径——不拥有传输行为。
+Network 设置页：一个 HTTP(S) 代理字段，写入由 Host 侧 [`@deepseek-ai/dsh-http`](../../http/http/README.zh.md) 所拥有的 `http` 设置命名空间。本包只拥有页面本身——字段、文案与写入路径——不拥有传输行为。
 
 字段实时生效：一次已提交的变更会作用于下一个对外请求（DeepSeek 对话适配器、网页抓取、网页搜索），无需重启。清除操作会让字段回退为继承组合默认值。
 

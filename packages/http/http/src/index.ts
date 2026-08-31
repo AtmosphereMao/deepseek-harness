@@ -25,11 +25,11 @@
 
 import { Context, Service } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import { installSettingsSection, settingsNamespace } from '@deepseek-ai/dsh-settings'
+import type {} from '@deepseek-ai/dsh-settings'
 import { getGlobalDispatcher, ProxyAgent, setGlobalDispatcher } from 'undici'
 
 /** Durable settings namespace carrying the shared transport configuration. */
-const NS = settingsNamespace('http')
+const NS = 'http'
 
 /**
  * Shared transport configuration, validated by {@link HttpTransport.Config}
@@ -102,10 +102,12 @@ export class HttpTransport extends Service {
     super(ctx, 'http')
     this.current = () => config
     this.refreshProxy()
-    installSettingsSection(ctx, NS, HttpTransport.Config, config, {
-      setSource: (source) => { this.current = source },
-      onChange: () => { this.refreshProxy() },
-      validate: assertUsableProxy,
+    ctx.inject(['settings'], (settingsCtx) => {
+      settingsCtx.settings.installSection(ctx, NS, HttpTransport.Config, config, {
+        setSource: (source) => { this.current = source },
+        onChange: () => { this.refreshProxy() },
+        validate: assertUsableProxy,
+      })
     })
     // Restore the process-wide dispatcher (and drop the pool) when this service
     // is disposed, so a stop or reload leaves the global fetch as it found it.

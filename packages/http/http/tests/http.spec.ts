@@ -2,11 +2,11 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createServer, type Server } from 'node:http'
 import { AddressInfo } from 'node:net'
 import { Context } from '@deepseek-ai/cordis'
-import { SettingsProvider, settingsNamespace } from '@deepseek-ai/dsh-settings'
+import SettingsProvider from '@deepseek-ai/dsh-settings'
 import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import HttpTransport from '@deepseek-ai/dsh-http'
 
-const NS = settingsNamespace('http')
+const NS = 'http'
 
 let server: Server
 let base: string

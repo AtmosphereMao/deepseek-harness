@@ -10,7 +10,7 @@
 
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import type { SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
+import type { SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { SnapshotSelectorHook } from '@deepseek-ai/dsh-client-ui-slots'
 import type { en } from './locales.ts'
 import styles from './NetworkSection.module.css'

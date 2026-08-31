@@ -3,9 +3,10 @@
 import { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
 import { resolveSlotLabel } from '@deepseek-ai/dsh-client-ui-slots'
-import { SlotRegistry } from '@deepseek-ai/dsh-client-runtime/client'
+import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { apply as settingsApply, inject as settingsInject } from '@deepseek-ai/dsh-client-ui-settings/client'
+import { scriptedSettingsRemote, TestRemote } from '@deepseek-ai/dsh-client-test-runtime'
 import { apply, inject } from '@deepseek-ai/dsh-client-ui-settings-network/client'
 import type { NetworkSectionInjected } from '@deepseek-ai/dsh-client-ui-settings-network/client'
 
@@ -17,19 +18,12 @@ async function bench() {
   const locale = new LocaleRuntime(ctx)
   locale.setLocale('zh')
   ctx.provide('locale', locale)
-  ctx.provide('remote', { $on: vi.fn(() => () => {}) } as never)
-  const mutate = vi.fn(() => Promise.resolve({ rpcId: 'm', result: { ok: false, error: {} } }))
-  ctx.provide('connection', {
-    isLoopback: true,
-    api: {
-      settings: {
-        describe: vi.fn(() => Promise.resolve({ rpcId: 's', result: { ok: false, error: {} } })),
-        mutate,
-      },
-    },
-  } as never)
+  const settingsRemote = scriptedSettingsRemote([
+    { ns: 'http', schema: {}, value: {}, applies: 'live', secrets: [], revision: 0 },
+  ])
+  new TestRemote(ctx, { settings: settingsRemote.settings })
   await ctx.plugin({ inject: [...settingsInject], apply: settingsApply }).await()
-  return { ctx, slots: ctx.get('slots') as SlotRegistry, mutate }
+  return { ctx, slots: ctx.get('slots') as SlotRegistry, mutate: settingsRemote.mutate }
 }
 
 function declareRoot(slots: SlotRegistry): () => void {
@@ -41,7 +35,7 @@ function declareRoot(slots: SlotRegistry): () => void {
 
 describe('ui-settings-network apply', () => {
   it('declares the services it uses', () => {
-    expect(inject).toEqual(['slots', 'locale', 'connection', 'remote', 'settingsScope'])
+    expect(inject).toEqual(['slots', 'locale', 'settingsScope'])
   })
 
   it('registers one Network section', async () => {
@@ -67,10 +61,11 @@ describe('ui-settings-network apply', () => {
 
     face.setProxy('http://127.0.0.1:9999')
     await vi.waitFor(() => {
-      expect(mutate).toHaveBeenCalledWith(expect.objectContaining({
-        ns: 'http',
-        ops: [{ op: 'set', path: ['proxy'], value: 'http://127.0.0.1:9999' }],
-      }))
+      expect(mutate).toHaveBeenCalledWith(
+        'http',
+        [{ op: 'set', path: ['proxy'], value: 'http://127.0.0.1:9999' }],
+        expect.anything(),
+      )
     })
   })
 
@@ -84,10 +79,11 @@ describe('ui-settings-network apply', () => {
 
     face.setProxy('')
     await vi.waitFor(() => {
-      expect(mutate).toHaveBeenCalledWith(expect.objectContaining({
-        ns: 'http',
-        ops: [{ op: 'unset', path: ['proxy'] }],
-      }))
+      expect(mutate).toHaveBeenCalledWith(
+        'http',
+        [{ op: 'unset', path: ['proxy'] }],
+        expect.anything(),
+      )
     })
   })
 

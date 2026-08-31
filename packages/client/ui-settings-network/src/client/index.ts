@@ -7,13 +7,15 @@
  */
 
 import { useSyncExternalStore } from 'react'
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type { HostObservable, SnapshotSelectorHook } from '@deepseek-ai/dsh-client-ui-slots'
 // Type-only: the settings shell's SlotMap merge (the 'settings.section' entry)
 // plus the ctx.settingsScope Context merge.
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 // Type-only: pulls the locale plugin's Context merge (ctx.locale).
 import type {} from '@deepseek-ai/dsh-client-locale/client'
+// Type-only: pulls the slot system's Context merge (ctx.slots).
+import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { NetworkSection } from './NetworkSection.tsx'
 import type { NetworkSectionInjected, NetworkSettings } from './NetworkSection.tsx'
 import { en, zh, type NetworkKey } from './locales.ts'
@@ -56,10 +58,9 @@ function bindScopeSelector<T>(source: HostObservable<T>): SnapshotSelectorHook<T
  * Required services (cordis fiber inject). The target slot is declared by
  * ui-settings' apply, whose activation order relative to this one is NOT
  * constrained; registration depends on the slot through `slots.inject()`.
- * `connection` and `remote` are injected because `settingsScope.bind()` reads
- * both for its transport and forwarded settings invalidations.
+ * `settingsScope` injects its own `remote`/`remote.settings` transport.
  */
-export const inject = ['slots', 'locale', 'connection', 'remote', 'settingsScope']
+export const inject = ['slots', 'locale', 'settingsScope']
 
 /**
  * Register the `settings.network` dictionaries and the Network section once
